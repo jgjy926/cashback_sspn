@@ -1,0 +1,20 @@
+name = "cashback-gateway"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+# Uncomment and set once you have it (Workers & Pages → Account ID). Avoids the
+# "Failed to automatically retrieve account IDs" auto-detect error.
+# account_id = "YOUR_ACCOUNT_ID"
+
+# Non-secret config. Override per your setup.
+[vars]
+# Lock CORS to your GitHub Pages origin (no trailing slash). Use "*" only while testing.
+ALLOWED_ORIGIN = "https://jgjy926.github.io"
+# Koofr WebDAV base folder (no trailing slash). The ledger, /receipts and /backups live under it.
+KOOFR_BASE = "https://app.koofr.net/dav/Koofr"
+LEDGER_FILE = "cashback_ledger_sync.json"
+
+# Secrets — set with:
+#   wrangler secret put KOOFR_USER
+#   wrangler secret put KOOFR_PASS     (use a Koofr app password, not your login password)
+#   wrangler secret put OCR_API_KEY    (free key from https://ocr.space/ocrapi)
+#   wrangler secret put APP_TOKEN      (any long random string; also paste into the app's Koofr Sync tab)

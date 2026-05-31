@@ -1,0 +1,69 @@
+addEventListener('fetch', event => {
+  event.respondWith(
+    handleRequest(event.request).catch(err => {
+      return new Response(JSON.stringify({ error: err.message, stack: err.stack }), {
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
+          'Content-Type': 'application/json'
+        }
+      })
+    })
+  )
+})
+
+async function handleRequest(request) {
+  const allowedHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
+    'Content-Type': 'application/json'
+  }
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { headers: allowedHeaders })
+  }
+
+  const remoteUrl = "https://app.koofr.net/dav/Koofr/cashback_ledger_sync.json"
+  const koofrAuth = btoa(`${KOOFR_USER}:${KOOFR_PASS}`)
+
+  if (request.method === 'PUT') {
+    try {
+      const payload = await request.text()
+      const response = await fetch(remoteUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Basic ${koofrAuth}`,
+          'Content-Type': 'application/json'
+        },
+        body: payload
+      })
+      if (response.ok) {
+        return new Response(JSON.stringify({ status: 'success' }), { headers: allowedHeaders })
+      }
+      return new Response(JSON.stringify({ error: 'WebDAV connection error' }), { status: response.status, headers: allowedHeaders })
+    } catch(err) {
+      return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: allowedHeaders })
+    }
+  }
+
+  if (request.method === 'GET') {
+    try {
+      const response = await fetch(remoteUrl, {
+        method: 'GET',
+        headers: { 'Authorization': `Basic ${koofrAuth}` }
+      })
+      if (response.status === 404) {
+        return new Response(JSON.stringify({ empty: true }), { headers: allowedHeaders })
+      }
+      const data = await response.text()
+      return new Response(data, { headers: allowedHeaders })
+    } catch(err) {
+      return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: allowedHeaders })
+    }
+  }
+
+  return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: allowedHeaders })
+}

@@ -1,0 +1,78 @@
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #030712; 
+            color: #f3f4f6;
+        }
+        .glass-card {
+            background: rgba(17, 24, 39, 0.7); 
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-card:hover {
+            border-color: rgba(99, 102, 241, 0.25); 
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7);
+        }
+        .active-filter-card {
+            border-color: #6366f1 !important;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.25) !important;
+            background: rgba(31, 38, 59, 0.8) !important;
+        }
+        
+        /* Premium Gradients */
+        .grad-purple-glow {
+            background: linear-gradient(135deg, #090d1a 0%, #111728 50%, #251342 100%);
+            border: 1px solid rgba(124, 58, 237, 0.2);
+        }
+        .grad-emerald {
+            background: linear-gradient(135deg, #031c18 0%, #05332b 55%, #031c18 100%);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+        .grad-indigo {
+            background: linear-gradient(135deg, #0c1122 0%, #161e38 60%, #161c3f 100%);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+        .grad-obsidian {
+            background: linear-gradient(135deg, #070a10 0%, #0e1320 60%, #161e2b 100%);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .grad-crimson {
+            background: linear-gradient(135deg, #12070c 0%, #1f0d15 50%, #3d0e1b 100%);
+            border: 1px solid rgba(225, 29, 72, 0.2);
+        }
+        .grad-amber {
+            background: linear-gradient(135deg, #120c05 0%, #1f140a 50%, #402b0f 100%);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+        .grad-teal {
+            background: linear-gradient(135deg, #031715 0%, #082421 50%, #0a423a 100%);
+            border: 1px solid rgba(20, 184, 166, 0.2);
+        }
+        .grad-electric {
+            background: linear-gradient(135deg, #051024 0%, #0a1b3b 50%, #0e2d6b 100%);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+        .grad-rose {
+            background: linear-gradient(135deg, #14080e 0%, #240e1a 50%, #4a1835 100%);
+            border: 1px solid rgba(236, 72, 153, 0.2);
+        }
+        .grad-bronze {
+            background: linear-gradient(135deg, #130b07 0%, #21130b 50%, #422414 100%);
+            border: 1px solid rgba(217, 119, 6, 0.2);
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #030712;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f2937;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6366f1;
+        }
