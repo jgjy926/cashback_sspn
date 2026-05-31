@@ -58,6 +58,7 @@ async function handle(request, env) {
     }
     if (request.method === 'PUT') {
       const payload = await request.text();
+      await mkcol(base, koofrAuth); // ensure the base folder exists (e.g. /Koofr/cashback_sspn)
       const res = await fetch(ledgerUrl, {
         method: 'PUT',
         headers: { Authorization: koofrAuth, 'Content-Type': 'application/json' },
@@ -98,6 +99,7 @@ async function handle(request, env) {
       if (buf.byteLength > MAX_IMAGE_BYTES) {
         return json({ error: `Image too large (${buf.byteLength} > ${MAX_IMAGE_BYTES})` }, 413, env);
       }
+      await mkcol(base, koofrAuth);   // ensure base folder first
       await mkcol(recDir, koofrAuth);
       const res = await fetch(recUrl, {
         method: 'PUT',
@@ -140,9 +142,17 @@ async function handle(request, env) {
 }
 
 // ---- helpers ----
+// A browser Origin is scheme+host(+port) only, never a path. Normalize whatever
+// ALLOWED_ORIGIN is configured to (even a full page URL) down to its bare origin.
+function allowedOrigin(env) {
+  const raw = env.ALLOWED_ORIGIN || '*';
+  if (raw === '*') return '*';
+  try { return new URL(raw).origin; } catch { return raw.replace(/\/.*$/, ''); }
+}
+
 function cors(env, contentType) {
   const h = {
-    'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
+    'Access-Control-Allow-Origin': allowedOrigin(env),
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
     'Vary': 'Origin',

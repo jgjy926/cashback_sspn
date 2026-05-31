@@ -10,7 +10,7 @@ compatibility_date = "2024-11-01"
 # Lock CORS to your GitHub Pages origin (no trailing slash). Use "*" only while testing.
 ALLOWED_ORIGIN = "https://jgjy926.github.io"
 # Koofr WebDAV base folder (no trailing slash). The ledger, /receipts and /backups live under it.
-KOOFR_BASE = "https://app.koofr.net/dav/Koofr"
+KOOFR_BASE = "https://app.koofr.net/dav/Koofr/cashback_sspn"
 LEDGER_FILE = "cashback_ledger_sync.json"
 
 # Secrets — set with:
