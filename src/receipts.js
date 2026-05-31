@@ -40,14 +40,20 @@ export async function runReceiptOcr() {
   try {
     const text = await runOcr(pending.blob);
     pending.ocrText = text;
-    const { merchant, date, total } = parseReceiptText(text);
+    const { merchant, date, total, merchantSource } = parseReceiptText(text);
     populateReceiptSelects();
     document.getElementById('recMerchant').value = merchant || '';
     document.getElementById('recDate').value = date || new Date().toISOString().slice(0, 10);
     document.getElementById('recTotal').value = total != null ? total.toFixed(2) : '';
     document.getElementById('recOcrText').value = text;
     document.getElementById('receiptForm').hidden = false;
-    status.innerText = text ? 'Scanned. Review and correct the fields below.' : 'No text detected — enter details manually.';
+    if (!text) {
+      status.innerText = 'No text detected — enter details manually.';
+    } else if (merchantSource === 'known') {
+      status.innerText = 'Scanned. Merchant matched a configured retailer ✓ — review the rest.';
+    } else {
+      status.innerText = 'Scanned. Merchant is a best guess — please verify the fields below.';
+    }
   } catch (err) {
     status.innerText = '';
     showToast(err.message, 'error');

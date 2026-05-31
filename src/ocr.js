@@ -1,4 +1,37 @@
 import { gatewayConfig } from './config.js';
+import { database } from './state.js';
+
+// All merchant names you've configured across card rules, longest first (more specific wins).
+function knownMerchants() {
+  const set = new Set();
+  for (const c of (database.cards || [])) {
+    for (const r of (c.rules || [])) {
+      (r.merchants || '').split(',').map(s => s.trim()).filter(Boolean).forEach(m => set.add(m));
+    }
+  }
+  return [...set].sort((a, b) => b.length - a.length);
+}
+
+// Lines that are almost never the merchant name.
+const MERCHANT_JUNK = /(\b(tel|fax|no|reg|gst|sst|inv|invoice|receipt|resit|cukai|salinan|tax|cash|change|sub\s*total|total|jumlah|qty|table|order|www|http|jalan|lorong|taman|persiaran|lot|kuala|selangor)\b|@|^\d|\d{2,}\s*-\s*\d)/i;
+
+function guessMerchant(lines) {
+  let best = '', bestScore = -Infinity;
+  lines.slice(0, 6).forEach((l, i) => {
+    const letters = (l.match(/[a-z]/gi) || []).length;
+    if (letters < 3) return;
+    const digits = (l.match(/\d/g) || []).length;
+    const upper = (l.match(/[A-Z]/g) || []).length;
+    let score = letters / l.length          // alphabetic density
+      + (upper / letters) * 0.5             // brand names are often UPPERCASE
+      + (6 - i) * 0.15                      // nearer the top of the receipt
+      - digits * 0.15;                      // digits => address / phone / reg no
+    if (MERCHANT_JUNK.test(l)) score -= 1.2;
+    if (l.length > 40) score -= 0.5;
+    if (score > bestScore) { bestScore = score; best = l; }
+  });
+  return best.replace(/[^\w&'.\- ]+$/, '').slice(0, 40);
+}
 
 const MAX_BYTES = 1024 * 1024; // OCR.space free + worker limit
 
@@ -81,8 +114,18 @@ export function parseReceiptText(text) {
     }
   }
 
-  // Merchant: first reasonably alphabetic line near the top.
-  const merchant = (lines.find(l => /[a-z]/i.test(l) && l.replace(/[^a-z]/gi, '').length >= 3) || '').slice(0, 60);
+  // Merchant: prefer a name you've already configured (high confidence); else score the top lines.
+  let merchant = '';
+  let merchantSource = 'none';
+  const lc = text.toLowerCase();
+  const hit = knownMerchants().find(m => m.length >= 3 && lc.includes(m.toLowerCase()));
+  if (hit) {
+    merchant = hit;
+    merchantSource = 'known';
+  } else {
+    merchant = guessMerchant(lines);
+    merchantSource = merchant ? 'guess' : 'none';
+  }
 
-  return { merchant, date, total };
+  return { merchant, date, total, merchantSource };
 }
