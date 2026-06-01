@@ -4,6 +4,7 @@ import { database, setDatabase } from './state.js';
 import { ensureMeta, migrate, persist } from './storage.js';
 import { askConfirm, showToast, switchTab } from './ui.js';
 import { gatewayConfig } from './config.js';
+import { renderReceipts } from './receipts.js';
 
 function saveSyncSettings() {
   localStorage.setItem('koofr_endpoint', document.getElementById('syncEndpoint').value.trim());
@@ -44,6 +45,7 @@ function applyPull(cloudDb) {
   persist();
   refreshLedgerAndCalculations();
   populateDropdownOptions();
+  renderReceipts();   // refresh the Receipts tab with the pulled data
   showToast('Workspace database sync load complete!', 'success');
 }
 
