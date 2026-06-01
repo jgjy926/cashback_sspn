@@ -16,7 +16,7 @@ import * as receipts from './receipts.js';
 import { loadFromLocalStorage } from './storage.js';
 import { initDatePickers } from './ui.js';
 import { populateDropdownOptions } from './dropdowns.js';
-import { refreshLedgerAndCalculations } from './dashboard.js';
+import { refreshLedgerAndCalculations, applyCurrentMonthDefaults } from './dashboard.js';
 import { renderReceipts } from './receipts.js';
 
 Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts);
@@ -25,6 +25,7 @@ window.addEventListener('load', () => {
   loadFromLocalStorage();
   initDatePickers();
   populateDropdownOptions();
+  applyCurrentMonthDefaults();   // default CC/SSPN/Receipts filters to the current month
   refreshLedgerAndCalculations();
   renderReceipts();
 });

@@ -40,6 +40,10 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                     const networkIcon = card.network ? getNetworkIcon(card.network) : '';
                     const bankPrefix = card.bank && !card.name.toLowerCase().startsWith(card.bank.toLowerCase()) ? `${card.bank} - ` : '';
                     const last4Suffix = card.last4 ? ` (•••• ${card.last4})` : '';
+                    const sourceBadge = t.receiptId
+                        ? `<span title="From receipt" class="text-[8px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-0.5 rounded font-bold"><i class="fa-solid fa-receipt"></i> Receipt</span>`
+                        : `<span title="Manual entry" class="text-[8px] bg-slate-500/10 text-slate-400 border border-slate-500/20 px-1.5 py-0.5 rounded font-bold"><i class="fa-solid fa-pen"></i> Manual</span>`;
+                    const remarkLine = t.remark ? `<div class="text-[9px] text-slate-500 italic">“${t.remark}”</div>` : '';
 
                     return `<tr class="hover:bg-gray-900/30 transition text-[11px]">
                         <td class="py-3 px-4 font-mono">${t.date}</td>
@@ -51,7 +55,8 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                         </td>
                         <td class="py-3 px-4 text-indigo-400 font-medium">${t.category}</td>
                         <td class="py-3 px-4 text-slate-400 font-semibold">${t.internalTag}</td>
-                        <td class="py-3 px-4 text-slate-400">${t.description}</td>
+                        <td class="py-3 px-4 text-slate-400">${t.description}${remarkLine}</td>
+                        <td class="py-3 px-4 text-center">${sourceBadge}</td>
                         <td class="py-3 px-4 text-right font-semibold">RM ${t.amount.toFixed(2)}</td>
                         <td class="py-3 px-4 text-right font-bold text-indigo-400 font-mono">RM ${t.calculatedCashback.toFixed(2)}</td>
                         <td class="py-3 px-4 text-center"><span class="text-[9px] font-bold px-2 py-0.5 rounded-md ${statusClass}">${t.statusMessage}</span></td>
@@ -475,4 +480,23 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
             `;
         }
 
-export { refreshLedgerAndCalculations, renderFilterDecks, setCardFilter, loadCardInteractiveMeter, renderInteractiveSelectorDeck, renderInteractiveInspectorContent };
+// Default the CC, SSPN and Receipts filters to the current calendar month on first load.
+// Older data is still reachable by changing the dropdowns.
+function applyCurrentMonthDefaults() {
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+
+    ['filterYear', 'sspnFilterYear', 'receiptFilterYear'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (![...el.options].some(o => o.value === year)) el.add(new Option(year, year));
+        el.value = year;
+    });
+    ['filterMonth', 'sspnFilterMonth', 'receiptFilterMonth'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = month;
+    });
+}
+
+export { refreshLedgerAndCalculations, renderFilterDecks, setCardFilter, loadCardInteractiveMeter, renderInteractiveSelectorDeck, renderInteractiveInspectorContent, applyCurrentMonthDefaults };

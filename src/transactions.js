@@ -105,6 +105,7 @@ import { askConfirm, initDatePickers, showToast } from './ui.js';
                 category: catKey,
                 internalTag: document.getElementById("txInternalCategory").value,
                 description: document.getElementById("txDescription").value || "General Expense",
+                remark: document.getElementById("txRemark").value.trim(),
                 amount: amount
             };
 
@@ -148,6 +149,7 @@ import { askConfirm, initDatePickers, showToast } from './ui.js';
 
             document.getElementById("editFormTxAmount").value = tx.amount;
             document.getElementById("editFormTxDesc").value = tx.description;
+            document.getElementById("editFormTxRemark").value = tx.remark || "";
 
             document.getElementById("editTxModal").classList.remove("hidden");
         }
@@ -181,6 +183,7 @@ import { askConfirm, initDatePickers, showToast } from './ui.js';
                 tx.internalTag = document.getElementById("editFormTxInternal").value;
                 tx.amount = parseFloat(document.getElementById("editFormTxAmount").value);
                 tx.description = document.getElementById("editFormTxDesc").value;
+                tx.remark = document.getElementById("editFormTxRemark").value.trim();
 
                 saveToLocalStorage();
                 refreshLedgerAndCalculations();

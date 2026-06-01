@@ -109,6 +109,12 @@ async function handle(request, env) {
       if (!res.ok) return json({ error: `Receipt write failed (${res.status})` }, res.status, env);
       return json({ status: 'success', id, bytes: buf.byteLength }, 200, env);
     }
+    if (request.method === 'DELETE') {
+      const res = await fetch(recUrl, { method: 'DELETE', headers: { Authorization: koofrAuth } });
+      // 404 = already gone; treat as success so the client can clean up its record either way.
+      if (!res.ok && res.status !== 404) return json({ error: `Receipt delete failed (${res.status})` }, res.status, env);
+      return json({ status: 'deleted', id }, 200, env);
+    }
     return json({ error: 'Method not allowed' }, 405, env);
   }
 
@@ -154,7 +160,7 @@ function cors(env, contentType) {
   const h = {
     'Access-Control-Allow-Origin': allowedOrigin(env),
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, OPTIONS',
     'Vary': 'Origin',
   };
   if (contentType) h['Content-Type'] = contentType;
