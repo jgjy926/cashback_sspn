@@ -15,7 +15,8 @@
  * Vars (wrangler.toml [vars]):       ALLOWED_ORIGIN, KOOFR_BASE, LEDGER_FILE
  */
 
-const MAX_IMAGE_BYTES = 1024 * 1024; // OCR.space free tier hard limit (1 MB)
+const MAX_IMAGE_BYTES = 1024 * 1024;       // OCR.space free tier hard limit (1 MB)
+const MAX_STORE_BYTES = 6 * 1024 * 1024;   // stored receipt images may be hi-res (sharp on zoom)
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 export default {
@@ -96,8 +97,8 @@ async function handle(request, env) {
     if (request.method === 'PUT') {
       const buf = await request.arrayBuffer();
       if (buf.byteLength === 0) return json({ error: 'Empty body' }, 400, env);
-      if (buf.byteLength > MAX_IMAGE_BYTES) {
-        return json({ error: `Image too large (${buf.byteLength} > ${MAX_IMAGE_BYTES})` }, 413, env);
+      if (buf.byteLength > MAX_STORE_BYTES) {
+        return json({ error: `Image too large (${buf.byteLength} > ${MAX_STORE_BYTES})` }, 413, env);
       }
       await mkcol(base, koofrAuth);   // ensure base folder first
       await mkcol(recDir, koofrAuth);

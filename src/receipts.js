@@ -2,10 +2,10 @@ import { database } from './state.js';
 import { saveToLocalStorage } from './storage.js';
 import { refreshLedgerAndCalculations } from './dashboard.js';
 import { showToast } from './ui.js';
-import { compressImage, runOcr, parseReceiptText } from './ocr.js';
+import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant } from './ocr.js';
 import { gatewayConfig } from './config.js';
 
-let pending = null; // { blob, dataUrl, width, height, ocrText }
+let pending = null; // { blob (hi-res for storage), ocrBlob (<=1MB for OCR), dataUrl, width, height, ocrText }
 
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
@@ -32,11 +32,13 @@ export async function handleReceiptFile(input) {
   const file = input.files && input.files[0];
   if (!file) return;
   try {
-    const { blob, width, height } = await compressImage(file);
-    pending = { blob, dataUrl: await blobToDataUrl(blob), width, height, ocrText: '' };
+    // Two copies: a hi-res one to store (sharp on zoom) and a <=1 MB one for OCR.
+    const store = await compressForStorage(file);
+    const ocr = await compressImage(file);
+    pending = { blob: store.blob, ocrBlob: ocr.blob, dataUrl: await blobToDataUrl(store.blob), width: store.width, height: store.height, ocrText: '' };
     document.getElementById('receiptPreview').src = pending.dataUrl;
     document.getElementById('receiptPreviewWrap').hidden = false;
-    document.getElementById('receiptSizeInfo').innerText = `${width}×${height}px · ${(blob.size / 1024).toFixed(0)} KB`;
+    document.getElementById('receiptSizeInfo').innerText = `${store.width}×${store.height}px · ${(store.blob.size / 1024).toFixed(0)} KB`;
     document.getElementById('receiptOcrStatus').innerText = '';
     document.getElementById('receiptForm').hidden = true;
     showToast('Photo ready. Tap "Scan with OCR".');
@@ -50,9 +52,9 @@ export async function runReceiptOcr() {
   const status = document.getElementById('receiptOcrStatus');
   status.innerText = 'Scanning… this can take a few seconds.';
   try {
-    const text = await runOcr(pending.blob);
+    const text = await runOcr(pending.ocrBlob);
     pending.ocrText = text;
-    const { merchant, date, total, merchantSource } = parseReceiptText(text);
+    const { merchant, date, total, merchantSource, confidence } = parseReceiptText(text);
     document.getElementById('recCard').innerHTML = cardOptions();
     document.getElementById('recTag').innerHTML = tagOptions();
     recCardChange();
@@ -61,9 +63,13 @@ export async function runReceiptOcr() {
     document.getElementById('recTotal').value = total != null ? total.toFixed(2) : '';
     document.getElementById('recOcrText').value = text;
     document.getElementById('receiptForm').hidden = false;
-    if (!text) status.innerText = 'No text detected — enter details manually.';
-    else if (merchantSource === 'known') status.innerText = 'Scanned. Merchant matched a configured retailer ✓ — review the rest.';
-    else status.innerText = 'Scanned. Merchant is a best guess — please verify the fields below.';
+    if (!text) {
+      status.innerText = 'No text detected — enter details manually.';
+    } else {
+      const pct = n => Math.round(n * 100) + '%';
+      const src = { learned: 'learned from your past edits', known: 'matched a configured retailer', guess: 'best guess', none: 'not found' }[merchantSource] || 'best guess';
+      status.innerText = `Scanned (${pct(confidence.overall)} overall). Merchant: ${src} (${pct(confidence.merchant)}) · Amount (${pct(confidence.total)}). Please verify below.`;
+    }
   } catch (err) {
     status.innerText = '';
     showToast(err.message, 'error');
@@ -112,6 +118,9 @@ export async function saveReceipt(e) {
     id, createdAt: new Date().toISOString(), merchant, date, total, currency,
     cardId, category, internalTag, remark, txId, ocrText: pending.ocrText || '', imagePath: `receipt/${id}`, bytes: pending.blob.size,
   });
+
+  // Self-learning: remember the merchant the user confirmed for these receipt tokens.
+  learnMerchant(pending.ocrText, merchant);
 
   saveToLocalStorage();
   refreshLedgerAndCalculations();
@@ -233,6 +242,9 @@ export function handleReceiptEditSubmit(e) {
   r.category = document.getElementById('editRecCategory').value;
   r.internalTag = document.getElementById('editRecTag').value;
   r.remark = document.getElementById('editRecRemark').value.trim();
+
+  // Self-learning: a correction here is the strongest signal of the right merchant.
+  learnMerchant(r.ocrText, r.merchant);
 
   if (r.txId && document.getElementById('editRecApplyTx').checked) {
     const tx = database.transactions.find(t => t.id === r.txId);
