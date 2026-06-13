@@ -2,7 +2,8 @@ import { database } from './state.js';
 import { saveToLocalStorage } from './storage.js';
 import { refreshLedgerAndCalculations } from './dashboard.js';
 import { showToast } from './ui.js';
-import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant } from './ocr.js';
+import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant,
+  aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD } from './ocr.js';
 import { gatewayConfig } from './config.js';
 
 let pending = null; // { blob (hi-res for storage), ocrBlob (<=1MB for OCR), dataUrl, width, height, ocrText }
@@ -54,7 +55,17 @@ export async function runReceiptOcr() {
   try {
     const text = await runOcr(pending.ocrBlob);
     pending.ocrText = text;
-    const { merchant, date, total, merchantSource, confidence } = parseReceiptText(text);
+    let parsed = parseReceiptText(text);
+
+    // Free, gated AI second opinion for low-confidence scans (Cloudflare Workers AI).
+    let aiUsed = false;
+    if (text && aiReviewEnabled() && parsed.confidence.overall < AI_REVIEW_THRESHOLD) {
+      status.innerText = 'Low confidence — asking AI to double-check…';
+      const merged = mergeAiReview(parsed, await runAiReview(text));
+      parsed = merged.parsed;
+      aiUsed = merged.changed;
+    }
+    const { merchant, date, total, merchantSource, confidence } = parsed;
     document.getElementById('recCard').innerHTML = cardOptions();
     document.getElementById('recTag').innerHTML = tagOptions();
     recCardChange();
@@ -67,8 +78,8 @@ export async function runReceiptOcr() {
       status.innerText = 'No text detected — enter details manually.';
     } else {
       const pct = n => Math.round(n * 100) + '%';
-      const src = { learned: 'learned from your past edits', known: 'matched a configured retailer', guess: 'best guess', none: 'not found' }[merchantSource] || 'best guess';
-      status.innerText = `Scanned (${pct(confidence.overall)} overall). Merchant: ${src} (${pct(confidence.merchant)}) · Amount (${pct(confidence.total)}). Please verify below.`;
+      const src = { learned: 'learned from your past edits', known: 'matched a configured retailer', ai: 'AI extracted', guess: 'best guess', none: 'not found' }[merchantSource] || 'best guess';
+      status.innerText = `Scanned (${pct(confidence.overall)} overall)${aiUsed ? ' · AI-assisted' : ''}. Merchant: ${src} (${pct(confidence.merchant)}) · Amount (${pct(confidence.total)}). Please verify below.`;
     }
   } catch (err) {
     status.innerText = '';
@@ -150,6 +161,8 @@ function populateReceiptFilter() {
 export function renderReceipts() {
   const list = document.getElementById('receiptsList');
   if (!list) return;
+  const aiToggle = document.getElementById('aiReviewToggle');
+  if (aiToggle) aiToggle.checked = aiReviewEnabled();
   populateReceiptFilter();
   const fy = (document.getElementById('receiptFilterYear') || {}).value || 'ALL';
   const fm = (document.getElementById('receiptFilterMonth') || {}).value || 'ALL';

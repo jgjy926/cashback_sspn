@@ -152,6 +152,61 @@ export async function runOcr(blob) {
   return data.text || '';
 }
 
+// ---------- AI review (free Cloudflare Workers AI fallback) ----------
+// Below this overall confidence a scan is worth a (free) AI second opinion.
+export const AI_REVIEW_THRESHOLD = 0.6;
+// Only let the AI override a field the heuristics were NOT already confident about.
+const AI_FIELD_CEILING = 0.7;
+// Confidence we assign to a field the AI supplied.
+const AI_CONFIDENCE = 0.8;
+
+// User toggle, stored device-local. Default ON.
+export function aiReviewEnabled() {
+  return localStorage.getItem('aiReview') !== '0';
+}
+export function setAiReview(on) {
+  localStorage.setItem('aiReview', on ? '1' : '0');
+}
+
+// Ask the gateway's free Workers AI route to re-extract fields from noisy OCR text.
+// Returns { merchant, date, total } (any may be null/'') or null on any failure —
+// the AI path must never break a scan, so all errors degrade to "no opinion".
+export async function runAiReview(text) {
+  const { base, token } = gatewayConfig();
+  if (!base || !token || !text) return null;
+  try {
+    const res = await fetch(base + '/ai-extract', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json().catch(() => null);
+    return res.ok ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+// Merge an AI second opinion into the heuristic result, overriding only the
+// fields the heuristics were unsure about. Mutates and returns `parsed`, plus a
+// flag of whether anything actually changed.
+export function mergeAiReview(parsed, ai) {
+  if (!ai) return { parsed, changed: false };
+  const c = parsed.confidence;
+  let changed = false;
+  if (ai.merchant && c.merchant < AI_FIELD_CEILING) {
+    parsed.merchant = ai.merchant; parsed.merchantSource = 'ai'; c.merchant = AI_CONFIDENCE; changed = true;
+  }
+  if (ai.date && c.date < AI_FIELD_CEILING) {
+    parsed.date = ai.date; c.date = AI_CONFIDENCE; changed = true;
+  }
+  if (typeof ai.total === 'number' && c.total < AI_FIELD_CEILING) {
+    parsed.total = ai.total; c.total = AI_CONFIDENCE; changed = true;
+  }
+  if (changed) c.overall = (c.merchant + c.total + c.date) / 3;
+  return { parsed, changed };
+}
+
 const MONEY_RE = /(?:rm|myr|\$)?\s*([0-9]{1,3}(?:[,\s]?[0-9]{3})*(?:\.[0-9]{2}))/i;
 // Lines whose money value IS the bill total.
 const TOTAL_POS = /\b(grand\s*total|total\s*(?:due|amount|sales)?|amount\s*(?:due|payable)|balance\s*due|nett?\s*total|jumlah)\b/i;

@@ -13,6 +13,13 @@ ALLOWED_ORIGIN = "https://jgjy926.github.io"
 KOOFR_BASE = "https://app.koofr.net/dav/Koofr/cashback_sspn"
 LEDGER_FILE = "cashback_ledger_sync.json"
 
+# Cloudflare Workers AI — powers the free, gated "AI review" fallback for
+# low-confidence receipt scans (POST /ai-extract). No secret/key needed; billed
+# in Neurons against the account's free daily allocation (10,000/day at time of
+# writing — see https://developers.cloudflare.com/workers-ai/platform/pricing/).
+[ai]
+binding = "AI"
+
 # Secrets — set with:
 #   wrangler secret put KOOFR_USER
 #   wrangler secret put KOOFR_PASS     (use a Koofr app password, not your login password)

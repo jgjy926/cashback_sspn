@@ -729,6 +729,11 @@
                     <input type="file" id="receiptFile" accept="image/*" onchange="handleReceiptFile(this)" class="hidden">
                 </label>
 
+                <label class="flex items-center justify-center gap-2 text-[10px] text-slate-400 cursor-pointer select-none">
+                    <input type="checkbox" id="aiReviewToggle" checked onchange="setAiReview(this.checked)" class="accent-indigo-500">
+                    AI double-check for low-confidence scans <span class="text-slate-600">(free, via Cloudflare AI)</span>
+                </label>
+
                 <div id="receiptPreviewWrap" hidden class="space-y-2">
                     <img id="receiptPreview" alt="Receipt preview" class="max-h-64 mx-auto rounded-xl border border-gray-800">
                     <p id="receiptSizeInfo" class="text-[10px] text-center text-slate-500 font-mono"></p>

@@ -10,9 +10,11 @@
  *   GET    /receipt/:id     -> read a stored receipt image
  *   PUT    /receipt/:id     -> store a compressed receipt image (<= 1 MB)
  *   POST   /ocr             -> forward an image to OCR.space, return parsed text
+ *   POST   /ai-extract      -> free Workers AI second opinion on noisy OCR text
  *
  * Secrets (wrangler secret put ...): KOOFR_USER, KOOFR_PASS, OCR_API_KEY, APP_TOKEN
  * Vars (wrangler.toml [vars]):       ALLOWED_ORIGIN, KOOFR_BASE, LEDGER_FILE
+ * Bindings (wrangler.toml):          AI (Workers AI, for /ai-extract)
  */
 
 const MAX_IMAGE_BYTES = 1024 * 1024;       // OCR.space free tier hard limit (1 MB)
@@ -145,7 +147,89 @@ async function handle(request, env) {
     return json({ text, exitCode: data.OCRExitCode }, 200, env);
   }
 
+  // ---- /ai-extract ----
+  // Free, gated "AI review": the client calls this only for low-confidence scans.
+  // Re-extracts structured fields from the (already OCR'd) text with a small
+  // Workers AI text model — no image re-upload, so it sidesteps the 1 MB OCR cap
+  // and stays well inside the free daily Neuron allocation.
+  if (path === '/ai-extract' && request.method === 'POST') {
+    if (!env.AI) return json({ error: 'Worker not configured: AI binding missing' }, 500, env);
+    const body = await request.json().catch(() => null);
+    const text = (body && typeof body.text === 'string') ? body.text.slice(0, 4000) : '';
+    if (!text.trim()) return json({ error: 'Empty text' }, 400, env);
+
+    const system =
+      'You extract structured data from noisy OCR text of a retail receipt. ' +
+      'Receipts often mix English and Malay (Bahasa Malaysia). ' +
+      'Reply with ONLY a JSON object with exactly these keys: ' +
+      '"merchant" (the store/brand name as a string), ' +
+      '"date" (the purchase date as "YYYY-MM-DD", or null), ' +
+      '"total" (the final amount paid, as a number with no currency symbol, or null). ' +
+      'The total is the grand total / amount due / "jumlah" — never a sub-total, tax/GST/SST, ' +
+      'rounding, change ("baki") or cash tendered ("tunai"). ' +
+      'If a field is not clearly present, use null. Do not invent values.';
+
+    let parsed = null;
+    try {
+      const out = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: text },
+        ],
+        max_tokens: 200,
+        temperature: 0,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            type: 'object',
+            properties: {
+              merchant: { type: ['string', 'null'] },
+              date: { type: ['string', 'null'] },
+              total: { type: ['number', 'null'] },
+            },
+            required: ['merchant', 'date', 'total'],
+          },
+        },
+      });
+      parsed = coerceJson(out && out.response);
+    } catch (err) {
+      return json({ error: 'AI extract failed: ' + err.message }, 502, env);
+    }
+    if (!parsed) return json({ error: 'AI returned no usable JSON' }, 502, env);
+
+    const merchant = typeof parsed.merchant === 'string' ? parsed.merchant.trim().slice(0, 60) : '';
+    const total = toNumber(parsed.total);
+    return json({ merchant, date: normalizeDate(parsed.date), total }, 200, env);
+  }
+
   return json({ error: 'Not found' }, 404, env);
+}
+
+// Workers AI may return `response` already parsed (json_schema mode) or as a
+// string that wraps the JSON in prose — handle both, never throw.
+function coerceJson(resp) {
+  if (resp == null) return null;
+  if (typeof resp === 'object') return resp;
+  if (typeof resp !== 'string') return null;
+  try { return JSON.parse(resp); } catch { /* fall through */ }
+  const m = resp.match(/\{[\s\S]*\}/);
+  if (m) { try { return JSON.parse(m[0]); } catch { /* give up */ } }
+  return null;
+}
+
+function toNumber(v) {
+  if (typeof v === 'number' && isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(/[^0-9.]/g, ''));
+    if (isFinite(n)) return n;
+  }
+  return null;
+}
+
+function normalizeDate(d) {
+  if (typeof d !== 'string') return null;
+  const m = d.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : null;
 }
 
 // ---- helpers ----

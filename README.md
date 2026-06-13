@@ -70,6 +70,9 @@ Edit `wrangler.toml` `[vars]`:
 - `KOOFR_BASE` → your Koofr WebDAV base folder, e.g. `https://app.koofr.net/dav/Koofr`.
 - `LEDGER_FILE` → ledger filename (default `cashback_ledger_sync.json`).
 
+The `[ai]` binding (Workers AI) is already in `wrangler.toml` and powers the free
+"AI review" fallback (`POST /ai-extract`) — no key or secret to set.
+
 ### 2. Frontend (GitHub Pages)
 
 Push the repo and enable Pages (Settings → Pages → deploy from branch, root).
@@ -86,9 +89,17 @@ Save. Use **Sync** (push) / **Load** (pull) in the header, and the **Receipts** 
 ## Receipt flow
 
 Capture → client compresses to ≤ 1 MB (JPEG, ~1000px long edge) → `POST /ocr` →
+regex/heuristic field parse (merchant/date/total + confidence) → **if overall
+confidence < 0.6 and AI review is on**, the OCR *text* is sent to `POST /ai-extract`
+for a free Workers AI second opinion that overrides only the low-confidence fields →
 editable confirm form → `PUT /receipt/<id>` stores the image in Koofr `/receipts/` →
 ledger keeps only `{ merchant, date, total, …, imagePath }` (no image bytes). Optionally
 the receipt is also logged as a credit-card transaction.
+
+The AI review is **gated** (only fires on low-confidence scans), **text-only** (no
+image re-upload, so it ignores the 1 MB OCR cap), and can be toggled off per device
+from the Receipts tab. It runs on Cloudflare Workers AI's free daily Neuron allowance,
+so it adds **$0** for personal volumes.
 
 ## Free-tier budget (shared-quota friendly)
 
@@ -96,6 +107,7 @@ the receipt is also logged as a credit-card transaction.
 |---|---|---|---|
 | Cloudflare Workers | 100k req/day | ~3 subreq/push, 1/OCR, 1/receipt | huge headroom |
 | OCR.space | 25k req/mo, 1 MB/file | 1 per scan | images forced < 1 MB client-side |
+| Workers AI | 10k Neurons/day | ~200/AI review, low-conf scans only | ~50 reviews/day free; gated + toggleable |
 | Koofr | 10 GB | ~100 KB/receipt + 1 backup/day | ~100k receipts |
 | GitHub Pages | 1 GB / 100 GB-mo | static | fine |
 
