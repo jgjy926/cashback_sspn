@@ -5,6 +5,7 @@ export const SCHEMA_VERSION = 1;
 export let database = {
             transactions: [],
             sspnRecords: [],
+            claims: [],
             cards: [
                 { 
                     id: "Maybank2Gold", 
@@ -100,7 +101,9 @@ export let database = {
                 sspnChannels: ["PTPTN Portal", "Bank Transfer", "Salary Deduction"],
                 sspnDevices: ["Mobile Phone", "Web Browser", "Counter Kiosk"],
                 sspnMethods: ["FPX Online", "Credit Card Route", "Direct Debit"],
-                optimizerCategories: ["Dining", "Groceries", "Utilities", "Petrol", "Online/Contactless", "Other Spending"]
+                optimizerCategories: ["Dining", "Groceries", "Utilities", "Petrol", "Online/Contactless", "Other Spending"],
+                claimTypes: ["Medical", "Insurance", "Tax Relief"],
+                claimStatuses: ["Not Submitted", "Submitted", "Approved", "Reimbursed", "Rejected"]
             }
         };
 

@@ -20,7 +20,7 @@
             <div class="flex items-center justify-between w-full lg:w-auto">
                 <div class="flex items-center gap-3">
                     <div class="h-10 w-10 bg-gradient-to-tr from-indigo-500 via-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/15">
-                        <i class="fa-solid fa-crown text-white text-lg font-bold"></i>
+                        <i class="fa-solid fa-wallet text-white text-lg font-bold"></i>
                     </div>
                     <div>
                         <h1 class="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-slate-100 via-indigo-200 to-purple-400 tracking-tight">CC Cashback & SSPN Wallet</h1>
@@ -56,13 +56,17 @@
                     <button onclick="switchTab('receipts')" id="tabBtn-receipts" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
                         <i class="fa-solid fa-receipt mr-1.5"></i>Receipts
                     </button>
+                    <button onclick="switchTab('claims')" id="tabBtn-claims" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
+                        <i class="fa-solid fa-file-medical mr-1.5"></i>Claims
+                    </button>
                     <button onclick="switchTab('koofrSync')" id="tabBtn-koofrSync" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
                         <i class="fa-solid fa-cloud mr-1.5"></i>Koofr Sync
                     </button>
                 </nav>
 
                 <div class="flex items-center justify-between sm:justify-center gap-1.5 bg-gray-950 p-1.5 rounded-xl border border-gray-800">
-                    <button onclick="handleCloudSync('push')" title="Sync workspace to Koofr cloud" class="flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold bg-[#6366f1] hover:bg-[#5053df] text-white shadow-md flex items-center justify-center gap-1.5 transition-all">
+                    <span id="syncStatus" title="Automatic cloud sync status" class="flex items-center gap-1 text-[10px] font-semibold text-slate-500 px-1.5"><i class="fa-solid fa-cloud"></i><span>Auto-sync</span></span>
+                    <button onclick="handleCloudSync('push')" title="Force push workspace to Koofr cloud" class="flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold bg-[#6366f1] hover:bg-[#5053df] text-white shadow-md flex items-center justify-center gap-1.5 transition-all">
                         <i class="fa-solid fa-cloud-arrow-up"></i>Sync
                     </button>
                     <button onclick="handleCloudSync('pull')" title="Load database from Koofr cloud" class="flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold bg-slate-850 hover:bg-slate-800 text-slate-200 border border-slate-700 flex items-center justify-center gap-1.5 transition-all">
@@ -671,6 +675,14 @@
                                     <input type="text" id="settingsSspnMethods" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono" placeholder="Comma separated">
                                 </div>
                             </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Types (Comma separated)</label>
+                                <input type="text" id="settingsClaimTypes" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono" placeholder="Medical, Insurance, Tax Relief">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Statuses (Comma separated, in workflow order)</label>
+                                <input type="text" id="settingsClaimStatuses" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono" placeholder="Not Submitted, Submitted, Approved, Reimbursed, Rejected">
+                            </div>
                             <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs uppercase tracking-wider transition">
                                 Apply Settings
                             </button>
@@ -780,6 +792,17 @@
                         <input type="text" id="recRemark" placeholder="Any note about this receipt" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
                     </div>
 
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Type (optional)</label>
+                            <select id="recClaimType" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"></select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Status</label>
+                            <select id="recClaimStatus" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"></select>
+                        </div>
+                    </div>
+
                     <div class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3">
                         <input type="checkbox" id="recAlsoLog" checked class="w-4 h-4 rounded border-gray-800 text-indigo-500 bg-gray-950 focus:ring-indigo-500 cursor-pointer">
                         <label for="recAlsoLog" class="text-xs font-semibold text-slate-300 cursor-pointer">Also add this receipt to the credit-card ledger as a transaction</label>
@@ -796,6 +819,23 @@
                 </form>
             </div>
 
+            <!-- Calendar view -->
+            <div class="glass-card rounded-2xl p-6 space-y-3">
+                <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                    <div>
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200"><i class="fa-solid fa-calendar-days text-indigo-400 mr-1.5"></i>Calendar</h3>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Tap a highlighted day to see that day's receipts and a quick breakdown.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="receiptCalShift(-1)" class="text-slate-400 hover:text-slate-100 px-2 py-1"><i class="fa-solid fa-chevron-left"></i></button>
+                        <span id="receiptCalendarLabel" class="text-xs font-bold text-slate-200 min-w-[110px] text-center"></span>
+                        <button onclick="receiptCalShift(1)" class="text-slate-400 hover:text-slate-100 px-2 py-1"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
+                <div id="receiptCalendarGrid" class="grid grid-cols-7 gap-1"></div>
+                <div id="receiptDayKpi" class="hidden bg-gray-950/40 border border-gray-800/60 rounded-xl p-3"></div>
+            </div>
+
             <div class="glass-card rounded-2xl p-6 space-y-3">
                 <div class="border-b border-gray-800 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
@@ -803,10 +843,10 @@
                         <p class="text-[10px] text-slate-500 mt-0.5">Images are fetched from Koofr on demand through the authenticated gateway.</p>
                     </div>
                     <div class="flex gap-2">
-                        <select id="receiptFilterYear" onchange="renderReceipts()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
+                        <select id="receiptFilterYear" onchange="onReceiptFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
                             <option value="ALL">All Years</option>
                         </select>
-                        <select id="receiptFilterMonth" onchange="renderReceipts()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
+                        <select id="receiptFilterMonth" onchange="onReceiptFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
                             <option value="ALL">All Months</option>
                             <option value="01">January</option><option value="02">February</option><option value="03">March</option>
                             <option value="04">April</option><option value="05">May</option><option value="06">June</option>
@@ -816,6 +856,120 @@
                     </div>
                 </div>
                 <div id="receiptsList" class="space-y-2"></div>
+            </div>
+        </section>
+
+        <!-- Claims Section -->
+        <section id="tabContent-claims" class="hidden space-y-6">
+            <!-- KPI dashboard -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Total Claimed</span>
+                    <h2 id="claimKpiClaimed" class="text-lg font-bold text-slate-100 font-mono">RM 0.00</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Total Reimbursed</span>
+                    <h2 id="claimKpiReimbursed" class="text-lg font-bold text-emerald-400 font-mono">RM 0.00</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Outstanding</span>
+                    <h2 id="claimKpiOutstanding" class="text-lg font-bold text-amber-400 font-mono">RM 0.00</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Claims</span>
+                    <h2 id="claimKpiCount" class="text-lg font-bold text-indigo-400 font-mono">0</h2>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Entry form -->
+                <div class="glass-card rounded-2xl p-6 space-y-4 lg:col-span-1">
+                    <div class="border-b border-gray-800 pb-3">
+                        <h3 class="text-base font-bold text-slate-200 uppercase tracking-wider"><i class="fa-solid fa-file-medical text-indigo-400 mr-2"></i>New Claim</h3>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Track any submission lifecycle (medical, insurance, tax…). Types &amp; statuses are configurable in System Setup.</p>
+                    </div>
+                    <form id="claimForm" onsubmit="handleClaimSubmit(event)" class="space-y-3">
+                        <div>
+                            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Title</label>
+                            <input type="text" id="claimTitle" required placeholder="e.g. May clinic visits" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Type</label>
+                                <select id="claimType" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"></select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Status</label>
+                                <select id="claimStatus" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"></select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Submitted Date</label>
+                                <input type="date" id="claimSubmittedDate" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 block [color-scheme:dark]">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Reference No.</label>
+                                <input type="text" id="claimReference" placeholder="CLM-…" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Period From</label>
+                                <input type="date" id="claimPeriodFrom" onchange="refreshClaimReceiptPicker()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 block [color-scheme:dark]">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Period To</label>
+                                <input type="date" id="claimPeriodTo" onchange="refreshClaimReceiptPicker()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 block [color-scheme:dark]">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claimed (RM)</label>
+                                <input type="number" step="0.01" id="claimedAmount" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Reimbursed (RM)</label>
+                                <input type="number" step="0.01" id="claimReimbursed" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Remark</label>
+                            <input type="text" id="claimRemark" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Link Receipts <span class="text-slate-600 normal-case">(within period)</span></label>
+                            <div id="claimReceiptList" class="max-h-40 overflow-y-auto bg-gray-950 border border-gray-800 rounded-xl px-3 py-2"></div>
+                        </div>
+                        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-widest transition">Save Claim</button>
+                    </form>
+                </div>
+
+                <!-- Ledger + chart -->
+                <div class="lg:col-span-2 space-y-6">
+                    <div class="glass-card rounded-2xl p-6 space-y-3">
+                        <div class="border-b border-gray-800 pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200">Claims Ledger</h3>
+                            <div class="flex gap-2">
+                                <select id="claimFilterType" onchange="renderClaims()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold"><option value="ALL">All Types</option></select>
+                                <select id="claimFilterStatus" onchange="renderClaims()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold"><option value="ALL">All Statuses</option></select>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left">
+                                <thead class="text-[9px] uppercase tracking-wider text-slate-500 border-b border-gray-800">
+                                    <tr>
+                                        <th class="py-2 px-4">Claim</th>
+                                        <th class="py-2 px-4">Submitted</th>
+                                        <th class="py-2 px-4 text-right">Claimed</th>
+                                        <th class="py-2 px-4 text-right">Reimbursed</th>
+                                        <th class="py-2 px-4 text-center">Status</th>
+                                        <th class="py-2 px-4 text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="claimsLedgerBody" class="divide-y divide-gray-800/60 text-slate-300"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-6">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3">Claims by Status</h3>
+                        <div class="h-56"><canvas id="claimStatusChart"></canvas></div>
+                    </div>
+                </div>
             </div>
         </section>
     </main>
@@ -950,6 +1104,12 @@
                 </div>
                 <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Remark</label>
                     <input type="text" id="editRecRemark" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Type</label>
+                        <select id="editRecClaimType" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Status</label>
+                        <select id="editRecClaimStatus" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
+                </div>
                 <div id="editRecLinkWrap" class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3 hidden">
                     <input type="checkbox" id="editRecApplyTx" class="w-4 h-4 rounded border-gray-800 text-indigo-500 bg-gray-950 focus:ring-indigo-500 cursor-pointer">
                     <label for="editRecApplyTx" class="text-xs font-semibold text-slate-300 cursor-pointer">Also apply these changes to the linked ledger transaction</label>
@@ -976,6 +1136,44 @@
                 <button onclick="closeDeleteReceipt()" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-slate-200 bg-gray-900 border border-gray-800">Cancel</button>
                 <button onclick="confirmDeleteReceipt()" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-500">Delete</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Edit Claim Modal -->
+    <div id="editClaimModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="glass-card w-full max-w-md rounded-2xl p-6 space-y-4 m-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <h3 class="text-sm font-bold text-indigo-400 uppercase tracking-widest"><i class="fa-solid fa-file-medical mr-1.5"></i>Edit Claim</h3>
+                <button onclick="closeEditClaimModal()" class="text-slate-400 hover:text-slate-100"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="editClaimForm" onsubmit="handleEditClaimSubmit(event)" class="space-y-3">
+                <input type="hidden" id="editClaimId">
+                <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Title</label>
+                    <input type="text" id="editClaimTitle" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Type</label>
+                        <select id="editClaimType" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Status</label>
+                        <select id="editClaimStatus" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Submitted Date</label>
+                        <input type="date" id="editClaimSubmittedDate" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Reference No.</label>
+                        <input type="text" id="editClaimReference" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Period From</label>
+                        <input type="date" id="editClaimPeriodFrom" onchange="refreshEditClaimReceiptPicker()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Period To</label>
+                        <input type="date" id="editClaimPeriodTo" onchange="refreshEditClaimReceiptPicker()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claimed (RM)</label>
+                        <input type="number" step="0.01" id="editClaimedAmount" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Reimbursed (RM)</label>
+                        <input type="number" step="0.01" id="editClaimReimbursed" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                </div>
+                <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Remark</label>
+                    <input type="text" id="editClaimRemark" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Link Receipts</label>
+                    <div id="editClaimReceiptList" class="max-h-40 overflow-y-auto bg-gray-950 border border-gray-800 rounded-xl px-3 py-2"></div></div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition">Save Changes</button>
+            </form>
         </div>
     </div>
 

@@ -411,6 +411,8 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
             database.settings.sspnChannels = parseCsv("settingsSspnChannels");
             database.settings.sspnDevices = parseCsv("settingsSspnDevices");
             database.settings.sspnMethods = parseCsv("settingsSspnMethods");
+            if (document.getElementById("settingsClaimTypes")) database.settings.claimTypes = parseCsv("settingsClaimTypes");
+            if (document.getElementById("settingsClaimStatuses")) database.settings.claimStatuses = parseCsv("settingsClaimStatuses");
 
             saveToLocalStorage();
             populateDropdownOptions();

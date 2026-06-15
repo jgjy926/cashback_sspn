@@ -22,7 +22,11 @@ export function ensureMeta() {
 export function migrate(db) {
   if (typeof db.schemaVersion !== 'number') db.schemaVersion = SCHEMA_VERSION;
   if (!Array.isArray(db.receipts)) db.receipts = [];
+  if (!Array.isArray(db.claims)) db.claims = [];
   if (!db.settings) db.settings = {};
+  // Config-driven claim taxonomy — adding a type/status here needs no code change.
+  if (!Array.isArray(db.settings.claimTypes)) db.settings.claimTypes = ['Medical', 'Insurance', 'Tax Relief'];
+  if (!Array.isArray(db.settings.claimStatuses)) db.settings.claimStatuses = ['Not Submitted', 'Submitted', 'Approved', 'Reimbursed', 'Rejected'];
   if (!db.meta) db.meta = { version: 1, updatedAt: new Date().toISOString(), deviceId: getDeviceId(), lastSyncedAt: null };
   return db;
 }
@@ -44,6 +48,8 @@ export function saveToLocalStorage() {
   database.meta.updatedAt = new Date().toISOString();
   database.meta.deviceId = getDeviceId();
   persist();
+  // Notify the auto-sync engine that local data changed (debounced push).
+  window.dispatchEvent(new Event('cc:dbchanged'));
 }
 
 export function loadFromLocalStorage() {
@@ -66,6 +72,12 @@ export function loadFromLocalStorage() {
     document.getElementById('settingsSspnChannels').value = (database.settings.sspnChannels || []).join(', ');
     document.getElementById('settingsSspnDevices').value = (database.settings.sspnDevices || []).join(', ');
     document.getElementById('settingsSspnMethods').value = (database.settings.sspnMethods || []).join(', ');
+    if (document.getElementById('settingsClaimTypes')) {
+      document.getElementById('settingsClaimTypes').value = (database.settings.claimTypes || []).join(', ');
+    }
+    if (document.getElementById('settingsClaimStatuses')) {
+      document.getElementById('settingsClaimStatuses').value = (database.settings.claimStatuses || []).join(', ');
+    }
   }
 
   if (document.getElementById('syncEndpoint')) {

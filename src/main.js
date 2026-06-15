@@ -13,13 +13,17 @@ import * as charts from './charts.js';
 import * as excel from './excel.js';
 import * as sync from './sync.js';
 import * as receipts from './receipts.js';
+import * as claims from './claims.js';
+import * as autosync from './autosync.js';
 import { loadFromLocalStorage } from './storage.js';
 import { initDatePickers } from './ui.js';
 import { populateDropdownOptions } from './dropdowns.js';
 import { refreshLedgerAndCalculations, applyCurrentMonthDefaults } from './dashboard.js';
 import { renderReceipts } from './receipts.js';
+import { renderClaims } from './claims.js';
+import { initAutoSync } from './autosync.js';
 
-Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts);
+Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts, claims, autosync);
 
 window.addEventListener('load', () => {
   loadFromLocalStorage();
@@ -28,4 +32,6 @@ window.addEventListener('load', () => {
   applyCurrentMonthDefaults();   // default CC/SSPN/Receipts filters to the current month
   refreshLedgerAndCalculations();
   renderReceipts();
+  renderClaims();
+  initAutoSync();                // pull on open + auto-push on change + periodic refresh
 });

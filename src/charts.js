@@ -132,4 +132,41 @@ let sspnTrendChartObj = null, sspnChannelPieChartObj = null;
             }
         }
 
-export { renderCharts, renderSspnCharts };
+let claimStatusChartObj = null;
+        // Doughnut of claim counts grouped by status. `statusStyle` (from claims.js)
+        // is reused so chart colors match the ledger badges, even for custom statuses.
+        function renderClaimCharts(records, statusStyle) {
+            const counts = {};
+            records.forEach(c => { const k = c.status || '—'; counts[k] = (counts[k] || 0) + 1; });
+
+            const colorFor = (status) => {
+                const cls = statusStyle ? statusStyle(status) : '';
+                if (cls.includes('emerald')) return '#10b981';
+                if (cls.includes('rose')) return '#f43f5e';
+                if (cls.includes('indigo')) return '#6366f1';
+                return '#64748b';
+            };
+
+            if (claimStatusChartObj) claimStatusChartObj.destroy();
+            const ctx = document.getElementById('claimStatusChart');
+            if (!ctx) return;
+            const labels = Object.keys(counts);
+            claimStatusChartObj = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels.length ? labels : ['No Claims'],
+                    datasets: [{
+                        data: labels.length ? Object.values(counts) : [1],
+                        backgroundColor: labels.length ? labels.map(colorFor) : ['#374151'],
+                        borderWidth: 2,
+                        borderColor: '#111827'
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '70%',
+                    plugins: { legend: { position: 'bottom', labels: { color: '#9ca3af', font: { size: 10, weight: 'bold' }, boxWidth: 12 } } }
+                }
+            });
+        }
+
+export { renderCharts, renderSspnCharts, renderClaimCharts };
