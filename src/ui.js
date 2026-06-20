@@ -109,7 +109,11 @@ import { setFilterDeckCollapsed } from './state.js';
         }
 
         function initDatePickers() {
-            const today = new Date().toISOString().split('T')[0];
+            // Use LOCAL date, not UTC. toISOString() yields the UTC day, which in UTC+8
+            // (Malaysia) is yesterday between 00:00–08:00 local — defaulting new entries to
+            // the wrong day and feeding a wrong date into the cashback cycle calculation.
+            const n = new Date();
+            const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
             if(document.getElementById("txDate")) document.getElementById("txDate").value = today;
             if(document.getElementById("sspnDate")) document.getElementById("sspnDate").value = today;
         }

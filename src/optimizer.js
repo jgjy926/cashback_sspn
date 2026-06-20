@@ -30,13 +30,18 @@ import { getNetworkIcon, getThemeStyles, showToast, switchTab } from './ui.js';
                 return;
             }
 
-            const simulatedTxs = evaluateCashbackSimulation(); 
+            const simulatedTxs = evaluateCashbackSimulation();
             const cardBillingCycleStats = {};
-            const todayStr = new Date().toISOString().split('T')[0];
-            const dateObj = new Date(todayStr.replace(/-/g, "/"));
-            const currentDayOfMonth = dateObj.getDate();
-            const currentDayOfWeek = dateObj.getDay(); 
+            // Derive "today" from LOCAL time. Using new Date().toISOString() returns the
+            // UTC date, which in UTC+8 (Malaysia) is the previous day between 00:00–08:00 local.
+            // That silently flipped weekend/day-of-month detection near midnight. All "today"
+            // components below are now sourced from this single local reference for consistency.
+            const now = new Date();
+            const currentDayOfMonth = now.getDate();
+            const currentDayOfWeek = now.getDay();
             const isWeekend = (currentDayOfWeek === 0 || currentDayOfWeek === 6);
+            const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+            const todayStr = `${now.getFullYear()}-${currentMonth}-${String(currentDayOfMonth).padStart(2, '0')}`;
 
             database.cards.forEach(c => {
                 const cycleKey = getTransactionCycle(todayStr, c.billingDay);
@@ -127,9 +132,8 @@ import { getNetworkIcon, getThemeStyles, showToast, switchTab } from './ui.js';
                 }
 
                 if (eligible && bestMatchedRule.monthsOnly) {
-                    const transMonth = String(new Date().getMonth() + 1).padStart(2, '0');
                     const allowedMonths = bestMatchedRule.monthsOnly.split(',').map(m => m.trim().padStart(2, '0'));
-                    if (allowedMonths.length > 0 && !allowedMonths.includes(transMonth)) {
+                    if (allowedMonths.length > 0 && !allowedMonths.includes(currentMonth)) {
                         eligible = false;
                         hasDayConstraintMatch = false;
                         rejectReason = `Requires Month ${bestMatchedRule.monthsOnly}`;
