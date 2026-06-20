@@ -77,7 +77,13 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
             }
         }
 
-        function addRuleRow(category = "", rate = 0, minTx = 0, tiered = false, tiers = [], categoryCap = 0, weekendOnly = false, merchants = "", daysOnly = "", activeCategories = [], monthsOnly = "") {
+        function addRuleRow(category = "", rate = 0, minTx = 0, tiered = false, tiers = [], categoryCap = 0, weekendOnly = false, merchants = "", daysOnly = "", activeCategories = [], monthsOnly = "", capOverrides = []) {
+            // Single-override UI: surface the first capOverrides entry (months + amount).
+            // The engine supports an array, but one override + base cap covers the common
+            // "RM100 in Mar/Apr, RM50 otherwise" promo shape.
+            const firstOverride = Array.isArray(capOverrides) && capOverrides.length > 0 ? capOverrides[0] : null;
+            const capMonths = firstOverride ? (firstOverride.months || "") : "";
+            const capOverrideAmt = firstOverride ? (firstOverride.cap || 0) : 0;
             const container = document.getElementById("rulesListContainer");
             const ruleId = "rule-" + Date.now() + Math.random().toString(36).substr(2, 4);
             const row = document.createElement("div");
@@ -137,6 +143,16 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
                         <div class="flex gap-1.5 items-center mt-3 font-mono">
                             <label class="text-[9px] uppercase font-bold text-teal-400 font-sans">Months Only</label>
                             <input type="text" value="${monthsOnly}" placeholder="e.g. 05, 06" class="rule-months-only w-16 bg-gray-950 border border-gray-800 rounded-lg px-2 py-0.5 text-[11px] text-slate-100 text-center focus:outline-none focus:border-teal-500" title="Comma separated month numbers, e.g. 05, 06 for May & June">
+                        </div>
+
+                        <!-- Month-conditional category cap override: e.g. months "03,04" => cap RM100, base cap otherwise -->
+                        <div class="flex gap-1.5 items-center mt-3 font-mono">
+                            <label class="text-[9px] uppercase font-bold text-fuchsia-400 font-sans">Cap Months</label>
+                            <input type="text" value="${capMonths}" placeholder="e.g. 03, 04" class="rule-cap-months w-16 bg-gray-950 border border-gray-800 rounded-lg px-2 py-0.5 text-[11px] text-slate-100 text-center focus:outline-none focus:border-fuchsia-500" title="Months where the override cap applies, e.g. 03, 04 for March & April">
+                        </div>
+                        <div class="flex gap-1.5 items-center mt-3 font-mono">
+                            <label class="text-[9px] uppercase font-bold text-fuchsia-400 font-sans">Cap (Those Months)</label>
+                            <input type="number" value="${capOverrideAmt}" placeholder="0" class="rule-cap-override w-14 bg-gray-950 border border-gray-800 rounded-lg px-2 py-1 text-[11px] text-slate-100 text-right" title="Category cap that applies during the months above; 0 disables the override">
                         </div>
 
                         <div class="flex gap-1 items-center mt-3">
@@ -277,7 +293,7 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
                         ? r.standardCategories 
                         : (r.standardCategory ? [r.standardCategory] : ["Other Spending"]);
 
-                    addRuleRow(r.category, r.rate, r.minTxSpend, r.tiered, r.tiers, r.categoryCap || 0, r.weekendOnly || false, r.merchants || "", r.daysOnly || "", targetCats, r.monthsOnly || "");
+                    addRuleRow(r.category, r.rate, r.minTxSpend, r.tiered, r.tiers, r.categoryCap || 0, r.weekendOnly || false, r.merchants || "", r.daysOnly || "", targetCats, r.monthsOnly || "", r.capOverrides || []);
                 });
             }
         }
@@ -322,6 +338,8 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
                 const merchantsInput = row.querySelector(".rule-merchants");
                 const daysOnlyInput = row.querySelector(".rule-days-only");
                 const monthsOnlyInput = row.querySelector(".rule-months-only");
+                const capMonthsInput = row.querySelector(".rule-cap-months");
+                const capOverrideInput = row.querySelector(".rule-cap-override");
 
                 // Dynamic extraction of Standard Mapping Categories array from toggled active pills
                 const selectedPills = Array.from(row.querySelectorAll(".rule-standard-pill.bg-indigo-600"))
@@ -339,9 +357,18 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
                         merchants: merchantsInput ? merchantsInput.value.trim() : "",
                         daysOnly: daysOnlyInput ? daysOnlyInput.value.trim() : "",
                         monthsOnly: monthsOnlyInput ? monthsOnlyInput.value.trim() : "",
+                        capOverrides: [],
                         rate: 0,
                         tiers: []
                     };
+
+                    // Month-conditional cap override (option a). Stored only when both a month
+                    // list and a positive cap are provided; absent => existing static cap behavior.
+                    const capMonthsVal = capMonthsInput ? capMonthsInput.value.trim() : "";
+                    const capOverrideVal = capOverrideInput ? (parseFloat(capOverrideInput.value) || 0) : 0;
+                    if (capMonthsVal && capOverrideVal > 0) {
+                        ruleData.capOverrides.push({ months: capMonthsVal, cap: capOverrideVal });
+                    }
 
                     if (tieredCheckbox.checked) {
                         const tierRows = row.querySelectorAll(".tier-row");

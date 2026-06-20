@@ -410,6 +410,9 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                 if (r.weekendOnly) restrictions.push("Weekends");
                 if (r.daysOnly) restrictions.push(`Days: ${r.daysOnly}`);
                 if (r.monthsOnly) restrictions.push(`Months: ${r.monthsOnly}`);
+                if (Array.isArray(r.capOverrides)) {
+                    r.capOverrides.forEach(ov => { if (ov && ov.months && ov.cap > 0) restrictions.push(`Cap RM${ov.cap} in ${ov.months}`); });
+                }
                 const restrictBadge = restrictions.length > 0 ? `<span class="bg-indigo-950 text-indigo-400 text-[8px] px-1.5 py-0.2 rounded font-bold">${restrictions.join(" | ")}</span>` : "";
 
                 catHTML += `

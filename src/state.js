@@ -18,7 +18,7 @@ export let database = {
                     cycleMinSpend: 0,
                     cycleCashbackCap: 50,
                     rules: [
-                        { category: "Weekend Dining", standardCategories: ["Dining"], rate: 0.05, minTxSpend: 0, categoryCap: 50, tiered: false, weekendOnly: true, merchants: "McDonald's, Starbucks, Pizza Hut, KFC, Nando's", daysOnly: "", monthsOnly: "", tiers: [] },
+                        { category: "Weekend Dining", standardCategories: ["Dining"], rate: 0.05, minTxSpend: 0, categoryCap: 50, capOverrides: [{ months: "03,04", cap: 100 }], tiered: false, weekendOnly: true, merchants: "McDonald's, Starbucks, Pizza Hut, KFC, Nando's", daysOnly: "", monthsOnly: "", tiers: [] },
                         { category: "Utilities", standardCategories: ["Utilities"], rate: 0.01, minTxSpend: 0, categoryCap: 0, tiered: false, weekendOnly: false, merchants: "TNB, Syabas, Telekom, Maxis", daysOnly: "", monthsOnly: "", tiers: [] },
                         { category: "Other spending", standardCategories: ["Other Spending"], rate: 0.002, minTxSpend: 0, categoryCap: 0, tiered: false, weekendOnly: false, merchants: "", daysOnly: "", monthsOnly: "", tiers: [] }
                     ]

@@ -1,5 +1,24 @@
 import { database } from './state.js';
 
+        // Resolve the effective category cap for a given calendar month (option a: keyed by
+        // the transaction's month). capOverrides is an optional array of { months, cap }, e.g.
+        // [{ months: "03,04", cap: 100 }] meaning RM100 in Mar/Apr. The first override whose
+        // month list contains monthStr ("MM") wins; otherwise the base categoryCap applies.
+        // Returns a raw number where 0 means "unlimited" (callers convert to Infinity).
+        function resolveCategoryCap(rule, monthStr) {
+            const base = (rule.categoryCap !== undefined && rule.categoryCap > 0) ? rule.categoryCap : 0;
+            if (Array.isArray(rule.capOverrides)) {
+                for (const ov of rule.capOverrides) {
+                    if (!ov || !ov.months) continue;
+                    const months = ov.months.split(',').map(m => m.trim().padStart(2, '0')).filter(Boolean);
+                    if (months.includes(monthStr)) {
+                        return (ov.cap !== undefined && ov.cap > 0) ? ov.cap : base;
+                    }
+                }
+            }
+            return base;
+        }
+
         function getTransactionCycle(txDateStr, billingDay) {
             const date = new Date(txDateStr);
             const y = date.getFullYear();
@@ -131,7 +150,9 @@ import { database } from './state.js';
                                 categoryCycleCashbackAccumulated[cycleKey][t.cardId][t.category] = 0;
                             }
 
-                            const categoryCapMax = (rule.categoryCap !== undefined && rule.categoryCap > 0) ? rule.categoryCap : Infinity;
+                            const txMonthStr = String(new Date(t.date.replace(/-/g, "/")).getMonth() + 1).padStart(2, '0');
+                            const effectiveCap = resolveCategoryCap(rule, txMonthStr);
+                            const categoryCapMax = effectiveCap > 0 ? effectiveCap : Infinity;
                             const currentCatAccumulated = categoryCycleCashbackAccumulated[cycleKey][t.cardId][t.category];
                             const currentCardAccumulated = cardCycleCashbackAccumulated[cycleKey][t.cardId];
 
@@ -172,4 +193,4 @@ import { database } from './state.js';
             }));
         }
 
-export { getTransactionCycle, evaluateCashbackSimulation };
+export { getTransactionCycle, evaluateCashbackSimulation, resolveCategoryCap };
