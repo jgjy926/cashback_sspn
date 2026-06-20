@@ -1,4 +1,4 @@
-import { evaluateCashbackSimulation, getTransactionCycle } from './calc.js';
+import { evaluateCashbackSimulation, getTransactionCycle, resolveCategoryCap } from './calc.js';
 import { database } from './state.js';
 import { getNetworkIcon, getThemeStyles, showToast, switchTab } from './ui.js';
 
@@ -149,7 +149,8 @@ import { getNetworkIcon, getThemeStyles, showToast, switchTab } from './ui.js';
                     }
 
                     const rawPotentialCB = spendAmount * potentialRate;
-                    const catCapMax = (bestMatchedRule.categoryCap !== undefined && bestMatchedRule.categoryCap > 0) ? bestMatchedRule.categoryCap : Infinity;
+                    const effectiveCatCap = resolveCategoryCap(bestMatchedRule, currentMonth);
+                    const catCapMax = effectiveCatCap > 0 ? effectiveCatCap : Infinity;
                     const cardCapMax = (c.cycleCashbackCap !== undefined && c.cycleCashbackCap > 0) ? c.cycleCashbackCap : Infinity;
 
                     const currentCatCB = stats.categoryAccum[bestMatchedRule.category] || 0;
@@ -227,7 +228,7 @@ import { getNetworkIcon, getThemeStyles, showToast, switchTab } from './ui.js';
                 const remainingOverall = maxOverall !== Infinity ? Math.max(0, maxOverall - capStats.accumCB) : Infinity;
                 const overallQuotaText = maxOverall !== Infinity ? `Overall: RM ${remainingOverall.toFixed(2)} left` : 'Overall: Unlimited';
 
-                const maxCat = res.rule.categoryCap || 0;
+                const maxCat = resolveCategoryCap(res.rule, currentMonth);
                 const currentCatCB = capStats.categoryAccum[res.rule.category] || 0;
                 const remainingCat = maxCat > 0 ? Math.max(0, maxCat - currentCatCB) : Infinity;
                 const catQuotaText = maxCat > 0 ? `Category: RM ${remainingCat.toFixed(2)} left` : '';
