@@ -1177,6 +1177,33 @@
         </div>
     </div>
 
-    <script type="module" src="./src/main.js"></script>
+    <!--
+      Cache-busting module loader. GitHub Pages serves src/*.js with a fixed
+      Cache-Control: max-age=600, and ES module sub-imports (./calc.js etc.) do
+      not inherit a query string, so mobile browsers can hold stale modules for
+      up to 10 minutes after a deploy. We inject a versioned import map that
+      remaps every module to "<name>.js?v=APP_VERSION", then load the versioned
+      entry. Bump APP_VERSION on each deploy (one place) to force every device
+      to fetch the new graph immediately.
+    -->
+    <script>
+      window.APP_VERSION = '2026.06.22-1';
+      (function () {
+        var v = window.APP_VERSION;
+        var mods = ['state','storage','config','sync','dashboard','dropdowns',
+          'ui','charts','calc','cards','optimizer','sspn','transactions',
+          'claims','autosync','receipts','ocr','excel','main'];
+        var imports = {};
+        mods.forEach(function (m) { imports['./src/' + m + '.js'] = './src/' + m + '.js?v=' + v; });
+        var im = document.createElement('script');
+        im.type = 'importmap';
+        im.textContent = JSON.stringify({ imports: imports });
+        document.currentScript.after(im);
+        var entry = document.createElement('script');
+        entry.type = 'module';
+        entry.src = './src/main.js?v=' + v;
+        im.after(entry);
+      })();
+    </script>
 </body>
 </html>
