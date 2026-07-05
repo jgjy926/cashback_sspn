@@ -7,3 +7,6 @@ node_modules/
 # Personal financial data — must never be published to the public Pages repo.
 # Lives in Koofr only.
 data/
+
+# Claude Code agent memory notes — local only, not part of the app.
+memory/

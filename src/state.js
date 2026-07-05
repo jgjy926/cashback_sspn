@@ -5,6 +5,7 @@ export const SCHEMA_VERSION = 1;
 export let database = {
             transactions: [],
             sspnRecords: [],
+            receipts: [],
             claims: [],
             cards: [
                 { 
@@ -103,7 +104,9 @@ export let database = {
                 sspnMethods: ["FPX Online", "Credit Card Route", "Direct Debit"],
                 optimizerCategories: ["Dining", "Groceries", "Utilities", "Petrol", "Online/Contactless", "Other Spending"],
                 claimTypes: ["Medical", "Insurance", "Tax Relief"],
-                claimStatuses: ["Not Submitted", "Submitted", "Approved", "Reimbursed", "Rejected"]
+                claimStatuses: ["Not Submitted", "Submitted", "Approved", "Reimbursed", "Rejected"],
+                // Non-card payment methods for receipts (cards are added automatically). Editable in Settings.
+                paymentMethods: ["Touch 'n Go eWallet", "GrabPay", "Boost", "ShopeePay", "DuitNow QR", "Cash", "Bank Transfer"]
             }
         };
 

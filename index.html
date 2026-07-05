@@ -683,6 +683,10 @@
                                 <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Statuses (Comma separated, in workflow order)</label>
                                 <input type="text" id="settingsClaimStatuses" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono" placeholder="Not Submitted, Submitted, Approved, Reimbursed, Rejected">
                             </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Receipt Payment Methods (Comma separated — your cards are added automatically)</label>
+                                <input type="text" id="settingsPaymentMethods" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono" placeholder="Touch 'n Go eWallet, GrabPay, Boost, Cash, Bank Transfer">
+                            </div>
                             <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs uppercase tracking-wider transition">
                                 Apply Settings
                             </button>
@@ -785,6 +789,10 @@
                             <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Internal Tag</label>
                             <select id="recTag" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"></select>
                         </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Payment Method</label>
+                            <select id="recPayment" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"></select>
+                        </div>
                     </div>
 
                     <div>
@@ -805,7 +813,12 @@
 
                     <div class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3">
                         <input type="checkbox" id="recAlsoLog" checked class="w-4 h-4 rounded border-gray-800 text-indigo-500 bg-gray-950 focus:ring-indigo-500 cursor-pointer">
-                        <label for="recAlsoLog" class="text-xs font-semibold text-slate-300 cursor-pointer">Also add this receipt to the credit-card ledger as a transaction</label>
+                        <label for="recAlsoLog" class="text-xs font-semibold text-slate-300 cursor-pointer">Log to credit-card ledger (reflect in CC Dashboard) — leave off for e-wallet/cash</label>
+                    </div>
+
+                    <div class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3">
+                        <input type="checkbox" id="recLinkClaim" class="w-4 h-4 rounded border-gray-800 text-violet-500 bg-gray-950 focus:ring-violet-500 cursor-pointer">
+                        <label for="recLinkClaim" class="text-xs font-semibold text-slate-300 cursor-pointer">Add to claims tracker (creates a claim entry from this receipt)</label>
                     </div>
 
                     <details class="bg-gray-950 border border-gray-800 rounded-xl p-3">
@@ -843,6 +856,10 @@
                         <p class="text-[10px] text-slate-500 mt-0.5">Images are fetched from Koofr on demand through the authenticated gateway.</p>
                     </div>
                     <div class="flex gap-2">
+                        <div class="relative flex-1 sm:flex-none">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[11px]"></i>
+                            <input type="search" id="receiptSearch" oninput="onReceiptSearch()" placeholder="Search receipts…" class="w-full sm:w-52 bg-gray-900 border border-gray-800 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                        </div>
                         <select id="receiptFilterYear" onchange="onReceiptFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
                             <option value="ALL">All Years</option>
                         </select>
@@ -1101,6 +1118,8 @@
                         <select id="editRecCategory" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
                     <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Internal Tag</label>
                         <select id="editRecTag" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Payment Method</label>
+                        <select id="editRecPayment" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
                 </div>
                 <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Remark</label>
                     <input type="text" id="editRecRemark" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
@@ -1113,6 +1132,10 @@
                 <div id="editRecLinkWrap" class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3 hidden">
                     <input type="checkbox" id="editRecApplyTx" class="w-4 h-4 rounded border-gray-800 text-indigo-500 bg-gray-950 focus:ring-indigo-500 cursor-pointer">
                     <label for="editRecApplyTx" class="text-xs font-semibold text-slate-300 cursor-pointer">Also apply these changes to the linked ledger transaction</label>
+                </div>
+                <div id="editRecClaimLinkWrap" class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3 hidden">
+                    <input type="checkbox" id="editRecApplyClaim" class="w-4 h-4 rounded border-gray-800 text-violet-500 bg-gray-950 focus:ring-violet-500 cursor-pointer">
+                    <label for="editRecApplyClaim" class="text-xs font-semibold text-slate-300 cursor-pointer">Also apply these changes to the linked claim</label>
                 </div>
                 <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition">Save Changes</button>
             </form>
@@ -1131,6 +1154,10 @@
             <div id="deleteRecLinkWrap" class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3 hidden">
                 <input type="checkbox" id="deleteRecAlsoTx" class="w-4 h-4 rounded border-gray-800 text-rose-500 bg-gray-950 focus:ring-rose-500 cursor-pointer">
                 <label for="deleteRecAlsoTx" class="text-xs font-semibold text-slate-300 cursor-pointer">Also delete the linked ledger transaction</label>
+            </div>
+            <div id="deleteRecClaimLinkWrap" class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3 hidden">
+                <input type="checkbox" id="deleteRecAlsoClaim" class="w-4 h-4 rounded border-gray-800 text-rose-500 bg-gray-950 focus:ring-rose-500 cursor-pointer">
+                <label for="deleteRecAlsoClaim" class="text-xs font-semibold text-slate-300 cursor-pointer">Also delete the linked claim entry</label>
             </div>
             <div class="flex gap-2.5 justify-end">
                 <button onclick="closeDeleteReceipt()" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-slate-200 bg-gray-900 border border-gray-800">Cancel</button>
@@ -1187,7 +1214,7 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.06.22-1';
+      window.APP_VERSION = '2026.07.05-2';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','dashboard','dropdowns',

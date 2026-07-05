@@ -1,6 +1,7 @@
 import { database } from './state.js';
 import { saveToLocalStorage } from './storage.js';
 import { refreshLedgerAndCalculations } from './dashboard.js';
+import { renderClaims } from './claims.js';
 import { showToast } from './ui.js';
 import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant,
   aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD } from './ocr.js';
@@ -33,6 +34,30 @@ function claimTypeOptions(selected) {
 }
 function claimStatusOptions(selected) {
   return (database.settings.claimStatuses || []).map(s => `<option value="${s}"${s === selected ? ' selected' : ''}>${s}</option>`).join('');
+}
+// Payment method picker: your cards (auto) + the configurable e-wallet/cash list from Settings.
+function paymentMethodOptions(selected) {
+  const opt = v => `<option value="${v}"${v === selected ? ' selected' : ''}>${v}</option>`;
+  const cards = database.cards.map(c => c.name);
+  const others = database.settings.paymentMethods || [];
+  let html = '';
+  if (cards.length) html += `<optgroup label="Cards">${cards.map(opt).join('')}</optgroup>`;
+  if (others.length) html += `<optgroup label="E-wallet / Other">${others.map(opt).join('')}</optgroup>`;
+  return html;
+}
+// Return the linked claim only when it is a *solo* (this-receipt-only) claim. Receipt→claim
+// sync must never overwrite or delete a multi-receipt claim grouped from the Claims tab.
+function linkedSoloClaim(r) {
+  if (!r || !r.claimId) return null;
+  const c = (database.claims || []).find(x => x.id === r.claimId);
+  if (c && Array.isArray(c.receiptIds) && c.receiptIds.length === 1 && c.receiptIds[0] === r.id) return c;
+  return null;
+}
+// Free-text receipt search across the fields a user is likely to remember.
+function receiptMatchesSearch(r, term) {
+  const amt = (typeof r.total === 'number') ? r.total.toFixed(2) : (r.total || '');
+  return [r.merchant, r.remark, r.paymentMethod, r.claimType, r.claimStatus, r.currency, r.date, amt]
+    .filter(Boolean).join(' ').toLowerCase().includes(term);
 }
 // Color a claim-status badge generically by keyword (mirrors claims.js statusStyle).
 function receiptClaimBadge(status) {
@@ -87,6 +112,8 @@ export async function runReceiptOcr() {
     document.getElementById('recTag').innerHTML = tagOptions();
     document.getElementById('recClaimType').innerHTML = claimTypeOptions();
     document.getElementById('recClaimStatus').innerHTML = claimStatusOptions();
+    document.getElementById('recPayment').innerHTML = paymentMethodOptions();
+    document.getElementById('recLinkClaim').checked = false;
     recCardChange();
     document.getElementById('recMerchant').value = merchant || '';
     document.getElementById('recDate').value = date || new Date().toISOString().slice(0, 10);
@@ -139,16 +166,37 @@ export async function saveReceipt(e) {
   const remark = document.getElementById('recRemark').value.trim();
   const claimType = document.getElementById('recClaimType').value;
   const claimStatus = document.getElementById('recClaimStatus').value;
+  const paymentMethod = document.getElementById('recPayment').value;
   const alsoLog = document.getElementById('recAlsoLog').checked;
+  const linkClaim = document.getElementById('recLinkClaim').checked;
 
   let txId = null;
   if (alsoLog && total > 0 && cardId) {
     txId = 'tx-' + Date.now();
     database.transactions.push({ id: txId, date, cardId, category, internalTag, description: merchant || 'Receipt', amount: total, remark, receiptId: id });
   }
+
+  // Optionally spin up a standalone (solo) claim entry from this receipt so it shows in the Claims tab.
+  let claimId = null;
+  if (linkClaim) {
+    claimId = 'claim-' + Date.now();
+    const types = database.settings.claimTypes || [];
+    const statuses = database.settings.claimStatuses || [];
+    database.claims.push({
+      id: claimId,
+      type: claimType || types[0] || 'Claim',
+      status: claimStatus || statuses[0] || '',
+      title: merchant || 'Receipt claim',
+      submittedDate: '', periodFrom: date, periodTo: date, reference: '',
+      claimedAmount: total, reimbursedAmount: 0, remark,
+      receiptIds: [id], createdAt: new Date().toISOString(),
+    });
+  }
+
   database.receipts.push({
     id, createdAt: new Date().toISOString(), merchant, date, total, currency,
-    cardId, category, internalTag, remark, claimType, claimStatus, txId, ocrText: pending.ocrText || '', imagePath: `receipt/${id}`, bytes: pending.blob.size,
+    cardId, category, internalTag, paymentMethod, remark, claimType, claimStatus, txId, claimId,
+    ocrText: pending.ocrText || '', imagePath: `receipt/${id}`, bytes: pending.blob.size,
   });
 
   // Self-learning: remember the merchant the user confirmed for these receipt tokens.
@@ -157,6 +205,7 @@ export async function saveReceipt(e) {
   saveToLocalStorage();
   refreshLedgerAndCalculations();
   renderReceipts();
+  renderClaims();
 
   pending = null;
   const form = document.getElementById('receiptForm');
@@ -165,7 +214,8 @@ export async function saveReceipt(e) {
   document.getElementById('receiptPreviewWrap').hidden = true;
   document.getElementById('receiptFile').value = '';
   document.getElementById('receiptOcrStatus').innerText = '';
-  showToast(txId ? 'Receipt saved and added to ledger.' : 'Receipt saved.', 'success');
+  const dest = [txId && 'ledger', claimId && 'claims'].filter(Boolean).join(' & ');
+  showToast(dest ? `Receipt saved (added to ${dest}).` : 'Receipt saved.', 'success');
 }
 
 // ---------- list + filter ----------
@@ -187,10 +237,13 @@ export function renderReceipts() {
   populateReceiptFilter();
   const fy = (document.getElementById('receiptFilterYear') || {}).value || 'ALL';
   const fm = (document.getElementById('receiptFilterMonth') || {}).value || 'ALL';
+  const term = (((document.getElementById('receiptSearch') || {}).value) || '').trim().toLowerCase();
 
-  // A selected calendar day overrides the year/month dropdown filter.
+  // An active search spans every receipt (ignoring the date filters, so e-wallet/standalone
+  // receipts in any month are findable); otherwise a calendar day overrides the year/month filter.
   const items = [...(database.receipts || [])]
     .filter(r => {
+      if (term) return receiptMatchesSearch(r, term);
       if (selectedDay) return r.date === selectedDay;
       const y = (r.date || '').slice(0, 4), m = (r.date || '').slice(5, 7);
       return (fy === 'ALL' || y === fy) && (fm === 'ALL' || m === fm);
@@ -198,10 +251,10 @@ export function renderReceipts() {
     .sort((a, b) => new Date(b.date) - new Date(a.date));
 
   renderReceiptCalendar();
-  renderDayKpi(items);
+  renderDayKpi(term ? [] : items);
 
   if (items.length === 0) {
-    list.innerHTML = '<p class="text-xs text-slate-500 italic text-center py-4">No receipts for this period.</p>';
+    list.innerHTML = `<p class="text-xs text-slate-500 italic text-center py-4">${term ? 'No receipts match your search.' : 'No receipts for this period.'}</p>`;
     return;
   }
   list.innerHTML = items.map(r => {
@@ -209,11 +262,12 @@ export function renderReceipts() {
     const linked = r.txId ? '<span class="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 rounded font-bold">Ledger</span>' : '';
     const claimBadge = receiptClaimBadge(r.claimStatus);
     const claimedBadge = r.claimId ? '<span class="text-[8px] bg-violet-500/10 text-violet-300 border border-violet-500/20 px-1.5 rounded font-bold">Claimed</span>' : '';
+    const payBadge = r.paymentMethod ? `<span class="text-[8px] bg-slate-500/10 text-slate-300 border border-slate-500/20 px-1.5 rounded font-bold">${r.paymentMethod}</span>` : '';
     const remark = r.remark ? `<div class="text-[10px] text-slate-400 italic truncate">“${r.remark}”</div>` : '';
     return `
       <div class="flex items-center justify-between gap-3 p-3 bg-gray-950/40 border border-gray-800/60 rounded-xl">
         <div class="min-w-0">
-          <div class="text-xs font-bold text-slate-200 truncate flex items-center gap-1.5">${r.merchant || '(no merchant)'} ${linked} ${claimBadge} ${claimedBadge}</div>
+          <div class="text-xs font-bold text-slate-200 truncate flex items-center gap-1.5">${r.merchant || '(no merchant)'} ${linked} ${claimBadge} ${claimedBadge} ${payBadge}</div>
           <div class="text-[10px] text-slate-500 font-mono">${r.date || ''} · ${r.currency || ''} ${amt} · ${(r.bytes / 1024).toFixed(0)} KB</div>
           ${remark}
         </div>
@@ -258,9 +312,15 @@ export function editReceipt(id) {
   document.getElementById('editRecRemark').value = r.remark || '';
   document.getElementById('editRecClaimType').innerHTML = claimTypeOptions(r.claimType || '');
   document.getElementById('editRecClaimStatus').innerHTML = claimStatusOptions(r.claimStatus || '');
+  document.getElementById('editRecPayment').innerHTML = paymentMethodOptions(r.paymentMethod || '');
+  document.getElementById('editRecPayment').value = r.paymentMethod || '';
   const wrap = document.getElementById('editRecLinkWrap');
   const cb = document.getElementById('editRecApplyTx');
   if (r.txId) { wrap.classList.remove('hidden'); cb.checked = true; } else { wrap.classList.add('hidden'); cb.checked = false; }
+  // The claim-sync option only makes sense for a solo claim (won't touch a multi-receipt claim).
+  const claimWrap = document.getElementById('editRecClaimLinkWrap');
+  const claimCb = document.getElementById('editRecApplyClaim');
+  if (linkedSoloClaim(r)) { claimWrap.classList.remove('hidden'); claimCb.checked = true; } else { claimWrap.classList.add('hidden'); claimCb.checked = false; }
   document.getElementById('editReceiptModal').classList.remove('hidden');
 }
 
@@ -287,6 +347,7 @@ export function handleReceiptEditSubmit(e) {
   r.remark = document.getElementById('editRecRemark').value.trim();
   r.claimType = document.getElementById('editRecClaimType').value;
   r.claimStatus = document.getElementById('editRecClaimStatus').value;
+  r.paymentMethod = document.getElementById('editRecPayment').value;
 
   // Self-learning: a correction here is the strongest signal of the right merchant.
   learnMerchant(r.ocrText, r.merchant);
@@ -300,9 +361,20 @@ export function handleReceiptEditSubmit(e) {
     }
   }
 
+  // Mirror the ledger sync for a solo claim: keep the auto-created claim entry in step.
+  const soloClaim = linkedSoloClaim(r);
+  if (soloClaim && document.getElementById('editRecApplyClaim').checked) {
+    soloClaim.title = r.merchant || 'Receipt claim';
+    soloClaim.type = r.claimType || soloClaim.type;
+    soloClaim.status = r.claimStatus || soloClaim.status;
+    soloClaim.claimedAmount = r.total;
+    soloClaim.remark = r.remark;
+  }
+
   saveToLocalStorage();
   refreshLedgerAndCalculations();
   renderReceipts();
+  renderClaims();
   closeEditReceipt();
   showToast('Receipt updated.', 'success');
 }
@@ -316,6 +388,11 @@ export function deleteReceipt(id) {
   const cb = document.getElementById('deleteRecAlsoTx');
   cb.checked = false;
   if (r.txId) wrap.classList.remove('hidden'); else wrap.classList.add('hidden');
+  // Offer to delete the linked claim only for a solo claim; a multi-receipt claim is left intact.
+  const claimWrap = document.getElementById('deleteRecClaimLinkWrap');
+  const claimCb = document.getElementById('deleteRecAlsoClaim');
+  claimCb.checked = false;
+  if (linkedSoloClaim(r)) claimWrap.classList.remove('hidden'); else claimWrap.classList.add('hidden');
   document.getElementById('deleteReceiptModal').classList.remove('hidden');
 }
 
@@ -327,6 +404,7 @@ export async function confirmDeleteReceipt() {
   const id = document.getElementById('deleteRecId').value;
   const r = (database.receipts || []).find(x => x.id === id);
   const alsoTx = document.getElementById('deleteRecAlsoTx').checked;
+  const alsoClaim = document.getElementById('deleteRecAlsoClaim').checked;
   const { base, token } = gatewayConfig();
 
   if (base && token) {
@@ -345,10 +423,19 @@ export async function confirmDeleteReceipt() {
     if (alsoTx) database.transactions = database.transactions.filter(t => t.id !== r.txId);
     else database.transactions.forEach(t => { if (t.id === r.txId) delete t.receiptId; });
   }
+  // Keep the linked claim consistent: delete a solo claim if the user opted in, otherwise just
+  // drop this receipt from the claim's list so the Claims tab has no dangling / inflated count.
+  if (r && r.claimId) {
+    const claim = (database.claims || []).find(c => c.id === r.claimId);
+    const solo = claim && Array.isArray(claim.receiptIds) && claim.receiptIds.length === 1 && claim.receiptIds[0] === id;
+    if (alsoClaim && solo) database.claims = (database.claims || []).filter(c => c.id !== r.claimId);
+    else if (claim && Array.isArray(claim.receiptIds)) claim.receiptIds = claim.receiptIds.filter(rid => rid !== id);
+  }
 
   saveToLocalStorage();
   refreshLedgerAndCalculations();
   renderReceipts();
+  renderClaims();
   closeDeleteReceipt();
   showToast('Receipt deleted.', 'success');
 }
@@ -368,6 +455,12 @@ function calYearMonth() {
 
 // Clear the day drill-down whenever the year/month filter changes.
 export function onReceiptFilterChange() {
+  selectedDay = null;
+  renderReceipts();
+}
+
+// Live receipt search (spans all months); clears any calendar-day drill-down.
+export function onReceiptSearch() {
   selectedDay = null;
   renderReceipts();
 }
