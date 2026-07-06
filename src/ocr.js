@@ -42,6 +42,15 @@ const TOKEN_STOPWORDS = new Set([
   'receipt', 'resit', 'invoice', 'tax', 'cash', 'total', 'jumlah', 'change', 'baki',
   'table', 'order', 'sales', 'salinan', 'cukai', 'copy', 'customer', 'welcome',
   'thank', 'thanks', 'sdn', 'bhd', 'enterprise', 'trading', 'tel', 'fax', 'gst', 'sst',
+  // Receipt-template / transaction boilerplate (not a brand).
+  'cashier', 'operator', 'terminal', 'merchant', 'approval', 'approved', 'batch', 'trace',
+  'tarikh', 'masa', 'nombor', 'simplified', 'registration', 'branch', 'cawangan', 'reprint',
+  'duplicate', 'original', 'payment', 'bayaran', 'tunai', 'card', 'visa', 'master', 'debit',
+  'credit', 'service', 'servis', 'discount', 'rounding', 'adjustment', 'address', 'alamat',
+  'email', 'http', 'www', 'berhad',
+  // Common Malaysian location tokens (addresses, not merchants).
+  'malaysia', 'kuala', 'lumpur', 'selangor', 'johor', 'penang', 'melaka', 'perak', 'kedah',
+  'pahang', 'sabah', 'sarawak', 'putrajaya', 'jalan', 'taman', 'bandar', 'persiaran', 'lorong',
 ]);
 
 // Distinctive UPPERCASE-normalized tokens from the receipt header (where the brand lives).
@@ -69,20 +78,42 @@ export function learnMerchant(ocrText, merchant) {
   entry.tokens = [...new Set([...tokens, ...entry.tokens])].slice(0, 12); // freshest tokens first, capped
 }
 
-// Best learned merchant for this receipt: needs ≥2 shared tokens; score = fraction of learned tokens present.
+// Tokens that appear on a large share of YOUR OWN receipts (bank templates, your city,
+// tax-ID boilerplate) carry no brand signal. Learn them from the stored-receipt corpus so
+// we don't rely only on a hand-kept denylist. Returns a Set of "generic" tokens.
+function genericTokens() {
+  const receipts = database.receipts || [];
+  if (receipts.length < 4) return new Set(); // too little data to judge genericness
+  const df = new Map();
+  for (const r of receipts) {
+    if (!r.ocrText) continue;
+    const lines = r.ocrText.split('\n').map(l => l.trim()).filter(Boolean);
+    for (const t of headerTokens(lines)) df.set(t, (df.get(t) || 0) + 1);
+  }
+  const cutoff = Math.max(3, receipts.length * 0.4); // in ≥40% of receipts (or ≥3) ⇒ generic
+  const generic = new Set();
+  for (const [t, c] of df) if (c >= cutoff) generic.add(t);
+  return generic;
+}
+
+// Best learned merchant for this receipt. A match must share ≥2 *distinctive* header tokens
+// (generic/template/address words removed) AND cover ≥50% of the merchant's learned identity,
+// so unrelated receipts that merely share boilerplate no longer grab your last-typed merchant.
 function matchAlias(lines) {
   const aliases = (database.settings && database.settings.merchantAliases) || [];
   if (!aliases.length) return null;
-  const cur = headerTokens(lines);
-  if (!cur.size) return null;
+  const generic = genericTokens();
+  const isGeneric = t => generic.has(t) || TOKEN_STOPWORDS.has(t.toLowerCase());
+  const cur = new Set([...headerTokens(lines)].filter(t => !isGeneric(t)));
+  if (cur.size < 2) return null; // need real brand signal before matching at all
   let best = null, bestScore = 0;
   for (const a of aliases) {
-    const at = a.tokens || [];
-    if (!at.length) continue;
+    const at = [...new Set(a.tokens || [])].filter(t => !isGeneric(t));
+    if (at.length < 2) continue;
     let inter = 0;
     for (const t of at) if (cur.has(t)) inter++;
-    const score = inter / at.length;
-    if (inter >= 2 && score > bestScore) { bestScore = score; best = { merchant: a.merchant, score }; }
+    const score = inter / at.length; // fraction of the merchant's distinctive identity present
+    if (inter >= 2 && score >= 0.5 && score > bestScore) { bestScore = score; best = { merchant: a.merchant, score }; }
   }
   return best;
 }
@@ -156,7 +187,8 @@ export async function runOcr(blob) {
 // Below this overall confidence a scan is worth a (free) AI second opinion.
 export const AI_REVIEW_THRESHOLD = 0.6;
 // Only let the AI override a field the heuristics were NOT already confident about.
-const AI_FIELD_CEILING = 0.7;
+// Also the bar below which a scan's merchant is "untrusted" and worth an AI second opinion.
+export const AI_FIELD_CEILING = 0.7;
 // Confidence we assign to a field the AI supplied.
 const AI_CONFIDENCE = 0.8;
 
@@ -256,7 +288,11 @@ export function parseReceiptText(text) {
   if (alias) {
     merchant = alias.merchant;
     merchantSource = 'learned';
-    merchantConfidence = Math.min(0.97, 0.65 + 0.32 * alias.score);
+    // Strong match (covers most of the merchant's distinctive tokens) is trusted; a weaker
+    // match stays tentative — below the AI ceiling — so the AI double-check can override it.
+    merchantConfidence = alias.score >= 0.75
+      ? Math.min(0.95, 0.7 + 0.3 * alias.score)
+      : 0.5 + 0.18 * alias.score;
   } else {
     const lc = text.toLowerCase();
     const hit = knownMerchants().find(m => m.length >= 3 && lc.includes(m.toLowerCase()));

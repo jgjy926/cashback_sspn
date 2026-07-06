@@ -4,7 +4,7 @@ import { refreshLedgerAndCalculations } from './dashboard.js';
 import { renderClaims } from './claims.js';
 import { showToast } from './ui.js';
 import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant,
-  aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD } from './ocr.js';
+  aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD, AI_FIELD_CEILING } from './ocr.js';
 import { gatewayConfig } from './config.js';
 
 let pending = null; // { blob (hi-res for storage), ocrBlob (<=1MB for OCR), dataUrl, width, height, ocrText }
@@ -99,9 +99,10 @@ export async function runReceiptOcr() {
     pending.ocrText = text;
     let parsed = parseReceiptText(text);
 
-    // Free, gated AI second opinion for low-confidence scans (Cloudflare Workers AI).
+    // Free, gated AI second opinion — fires when the scan is low-confidence overall OR when the
+    // merchant specifically is untrusted (a guess or a weak learned match), so AI can correct it.
     let aiUsed = false;
-    if (text && aiReviewEnabled() && parsed.confidence.overall < AI_REVIEW_THRESHOLD) {
+    if (text && aiReviewEnabled() && (parsed.confidence.overall < AI_REVIEW_THRESHOLD || parsed.confidence.merchant < AI_FIELD_CEILING)) {
       status.innerText = 'Low confidence — asking AI to double-check…';
       const merged = mergeAiReview(parsed, await runAiReview(text));
       parsed = merged.parsed;
