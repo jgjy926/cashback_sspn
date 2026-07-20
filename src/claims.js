@@ -260,6 +260,10 @@ function renderClaimsDashboard(list) {
 // Umbrella refresh used by main bootstrap, CRUD, and cloud load.
 export function renderClaims() {
   populateClaimDropdowns();
+  // Keep the "Link Receipts" picker in step with stored receipts. Without this the picker is
+  // only ever built by the period onchange handlers, so it sits empty on a fresh page load and
+  // newly captured receipts look like they never reached the Claims tab.
+  refreshClaimReceiptPicker();
   const list = filteredClaims();
   renderClaimsLedger(list);
   renderClaimsDashboard(list);

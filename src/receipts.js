@@ -188,7 +188,9 @@ export async function saveReceipt(e) {
       type: claimType || types[0] || 'Claim',
       status: claimStatus || statuses[0] || '',
       title: merchant || 'Receipt claim',
-      submittedDate: '', periodFrom: date, periodTo: date, reference: '',
+      // Period is left open so the claim's receipt picker isn't pinned to a single day —
+      // you can still add other receipts to this claim later from the Claims tab.
+      submittedDate: '', periodFrom: '', periodTo: '', reference: '',
       claimedAmount: total, reimbursedAmount: 0, remark,
       receiptIds: [id], createdAt: new Date().toISOString(),
     });
