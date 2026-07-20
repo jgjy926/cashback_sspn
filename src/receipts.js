@@ -53,6 +53,25 @@ function linkedSoloClaim(r) {
   if (c && Array.isArray(c.receiptIds) && c.receiptIds.length === 1 && c.receiptIds[0] === r.id) return c;
   return null;
 }
+// Build the Claims-tab entry for a receipt. Mirrors the ledger auto-log: every field is taken
+// from the receipt, so nothing has to be re-entered in the Claims tab. Returns the new claim id.
+function createClaimFromReceipt(r) {
+  const types = database.settings.claimTypes || [];
+  const statuses = database.settings.claimStatuses || [];
+  const claimId = 'claim-' + Date.now() + Math.random().toString(36).slice(2, 5);
+  database.claims.push({
+    id: claimId,
+    type: r.claimType || types[0] || 'Claim',
+    status: r.claimStatus || statuses[0] || '',
+    title: r.merchant || 'Receipt claim',
+    // Period stays open so the claim's receipt picker isn't pinned to a single day.
+    submittedDate: '', periodFrom: '', periodTo: '', reference: '',
+    claimedAmount: r.total, reimbursedAmount: 0, remark: r.remark || '',
+    receiptIds: [r.id], createdAt: new Date().toISOString(),
+  });
+  return claimId;
+}
+
 // Free-text receipt search across the fields a user is likely to remember.
 function receiptMatchesSearch(r, term) {
   const amt = (typeof r.total === 'number') ? r.total.toFixed(2) : (r.total || '');
@@ -114,8 +133,8 @@ export async function runReceiptOcr() {
     document.getElementById('recClaimType').innerHTML = claimTypeOptions();
     document.getElementById('recClaimStatus').innerHTML = claimStatusOptions();
     document.getElementById('recPayment').innerHTML = paymentMethodOptions();
-    document.getElementById('recLinkClaim').checked = false;
     recCardChange();
+    recClaimTypeChange(); // arm claim routing to match the pre-selected claim type
     document.getElementById('recMerchant').value = merchant || '';
     document.getElementById('recDate').value = date || new Date().toISOString().slice(0, 10);
     document.getElementById('recTotal').value = total != null ? total.toFixed(2) : '';
@@ -136,6 +155,14 @@ export async function runReceiptOcr() {
 
 export function recCardChange() {
   document.getElementById('recCategory').innerHTML = categoryOptions(document.getElementById('recCard').value);
+}
+
+// Choosing a claim type is the signal that this receipt is claimable, so it arms the claim
+// routing automatically — the same way the ledger checkbox is on by default. Still opt-out-able.
+export function recClaimTypeChange() {
+  const type = document.getElementById('recClaimType').value;
+  const cb = document.getElementById('recLinkClaim');
+  if (cb) cb.checked = !!type;
 }
 
 export async function saveReceipt(e) {
@@ -177,30 +204,16 @@ export async function saveReceipt(e) {
     database.transactions.push({ id: txId, date, cardId, category, internalTag, description: merchant || 'Receipt', amount: total, remark, receiptId: id });
   }
 
-  // Optionally spin up a standalone (solo) claim entry from this receipt so it shows in the Claims tab.
-  let claimId = null;
-  if (linkClaim) {
-    claimId = 'claim-' + Date.now();
-    const types = database.settings.claimTypes || [];
-    const statuses = database.settings.claimStatuses || [];
-    database.claims.push({
-      id: claimId,
-      type: claimType || types[0] || 'Claim',
-      status: claimStatus || statuses[0] || '',
-      title: merchant || 'Receipt claim',
-      // Period is left open so the claim's receipt picker isn't pinned to a single day —
-      // you can still add other receipts to this claim later from the Claims tab.
-      submittedDate: '', periodFrom: '', periodTo: '', reference: '',
-      claimedAmount: total, reimbursedAmount: 0, remark,
-      receiptIds: [id], createdAt: new Date().toISOString(),
-    });
-  }
-
-  database.receipts.push({
+  const receipt = {
     id, createdAt: new Date().toISOString(), merchant, date, total, currency,
-    cardId, category, internalTag, paymentMethod, remark, claimType, claimStatus, txId, claimId,
+    cardId, category, internalTag, paymentMethod, remark, claimType, claimStatus, txId, claimId: null,
     ocrText: pending.ocrText || '', imagePath: `receipt/${id}`, bytes: pending.blob.size,
-  });
+  };
+  database.receipts.push(receipt);
+
+  // Auto-create the Claims-tab entry from this receipt, mirroring the ledger auto-log.
+  if (linkClaim) receipt.claimId = createClaimFromReceipt(receipt);
+  const claimId = receipt.claimId;
 
   // Self-learning: remember the merchant the user confirmed for these receipt tokens.
   learnMerchant(pending.ocrText, merchant);
@@ -320,15 +333,41 @@ export function editReceipt(id) {
   const wrap = document.getElementById('editRecLinkWrap');
   const cb = document.getElementById('editRecApplyTx');
   if (r.txId) { wrap.classList.remove('hidden'); cb.checked = true; } else { wrap.classList.add('hidden'); cb.checked = false; }
-  // The claim-sync option only makes sense for a solo claim (won't touch a multi-receipt claim).
-  const claimWrap = document.getElementById('editRecClaimLinkWrap');
-  const claimCb = document.getElementById('editRecApplyClaim');
-  if (linkedSoloClaim(r)) { claimWrap.classList.remove('hidden'); claimCb.checked = true; } else { claimWrap.classList.add('hidden'); claimCb.checked = false; }
+  updateEditClaimControls();
   document.getElementById('editReceiptModal').classList.remove('hidden');
 }
 
 export function editRecCardChange() {
   document.getElementById('editRecCategory').innerHTML = categoryOptions(document.getElementById('editRecCard').value);
+}
+
+// Drive the edit modal's claim control from the receipt's current state:
+//  - already a solo claim  -> offer to push these edits onto it
+//  - no claim yet          -> offer to create one (armed as soon as a claim type is picked)
+//  - part of a grouped claim -> hide; that claim is managed from the Claims tab
+function updateEditClaimControls() {
+  const wrap = document.getElementById('editRecClaimLinkWrap');
+  const cb = document.getElementById('editRecApplyClaim');
+  const lbl = document.getElementById('editRecApplyClaimLabel');
+  if (!wrap || !cb) return;
+  const r = (database.receipts || []).find(x => x.id === document.getElementById('editRecId').value);
+  const type = document.getElementById('editRecClaimType').value;
+  if (r && linkedSoloClaim(r)) {
+    wrap.classList.remove('hidden');
+    if (lbl) lbl.innerText = 'Also apply these changes to the linked claim';
+    cb.checked = true;
+  } else if (r && !r.claimId) {
+    wrap.classList.remove('hidden');
+    if (lbl) lbl.innerText = 'Create a claim entry in the Claims tab from this receipt';
+    cb.checked = !!type;
+  } else {
+    wrap.classList.add('hidden');
+    cb.checked = false;
+  }
+}
+
+export function editRecClaimTypeChange() {
+  updateEditClaimControls();
 }
 
 export function closeEditReceipt() {
@@ -364,14 +403,19 @@ export function handleReceiptEditSubmit(e) {
     }
   }
 
-  // Mirror the ledger sync for a solo claim: keep the auto-created claim entry in step.
+  // Mirror the ledger sync for a solo claim: keep the auto-created claim entry in step. If the
+  // receipt has no claim yet, create one here so a receipt tagged with a claim type always
+  // reaches the Claims tab fully populated — nothing to re-enter there.
   const soloClaim = linkedSoloClaim(r);
-  if (soloClaim && document.getElementById('editRecApplyClaim').checked) {
+  const applyClaim = document.getElementById('editRecApplyClaim').checked;
+  if (soloClaim && applyClaim) {
     soloClaim.title = r.merchant || 'Receipt claim';
     soloClaim.type = r.claimType || soloClaim.type;
     soloClaim.status = r.claimStatus || soloClaim.status;
     soloClaim.claimedAmount = r.total;
     soloClaim.remark = r.remark;
+  } else if (!r.claimId && applyClaim) {
+    r.claimId = createClaimFromReceipt(r);
   }
 
   saveToLocalStorage();

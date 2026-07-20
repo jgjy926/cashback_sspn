@@ -803,7 +803,7 @@
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Type (optional)</label>
-                            <select id="recClaimType" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"></select>
+                            <select id="recClaimType" onchange="recClaimTypeChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"></select>
                         </div>
                         <div>
                             <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Status</label>
@@ -818,7 +818,7 @@
 
                     <div class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3">
                         <input type="checkbox" id="recLinkClaim" class="w-4 h-4 rounded border-gray-800 text-violet-500 bg-gray-950 focus:ring-violet-500 cursor-pointer">
-                        <label for="recLinkClaim" class="text-xs font-semibold text-slate-300 cursor-pointer">Add to claims tracker (creates a claim entry from this receipt)</label>
+                        <label for="recLinkClaim" class="text-xs font-semibold text-slate-300 cursor-pointer">Create a claim entry in the Claims tab from this receipt — auto-filled, nothing to re-enter</label>
                     </div>
 
                     <details class="bg-gray-950 border border-gray-800 rounded-xl p-3">
@@ -1125,7 +1125,7 @@
                     <input type="text" id="editRecRemark" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Type</label>
-                        <select id="editRecClaimType" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
+                        <select id="editRecClaimType" onchange="editRecClaimTypeChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
                     <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Status</label>
                         <select id="editRecClaimStatus" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
                 </div>
@@ -1135,7 +1135,7 @@
                 </div>
                 <div id="editRecClaimLinkWrap" class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3 hidden">
                     <input type="checkbox" id="editRecApplyClaim" class="w-4 h-4 rounded border-gray-800 text-violet-500 bg-gray-950 focus:ring-violet-500 cursor-pointer">
-                    <label for="editRecApplyClaim" class="text-xs font-semibold text-slate-300 cursor-pointer">Also apply these changes to the linked claim</label>
+                    <label for="editRecApplyClaim" id="editRecApplyClaimLabel" class="text-xs font-semibold text-slate-300 cursor-pointer">Also apply these changes to the linked claim</label>
                 </div>
                 <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition">Save Changes</button>
             </form>
@@ -1214,7 +1214,7 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.07.06-2';
+      window.APP_VERSION = '2026.07.06-3';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','dashboard','dropdowns',
