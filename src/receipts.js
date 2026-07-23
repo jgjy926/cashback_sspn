@@ -55,7 +55,7 @@ function linkedSoloClaim(r) {
 }
 // Build the Claims-tab entry for a receipt. Mirrors the ledger auto-log: every field is taken
 // from the receipt, so nothing has to be re-entered in the Claims tab. Returns the new claim id.
-function createClaimFromReceipt(r) {
+function createClaimFromReceipt(r, opts = {}) {
   const types = database.settings.claimTypes || [];
   const statuses = database.settings.claimStatuses || [];
   const claimId = 'claim-' + Date.now() + Math.random().toString(36).slice(2, 5);
@@ -64,8 +64,10 @@ function createClaimFromReceipt(r) {
     type: r.claimType || types[0] || 'Claim',
     status: r.claimStatus || statuses[0] || '',
     title: r.merchant || 'Receipt claim',
+    // Submission date defaults from the receipt date ("take from Date"); reference = receipt number.
+    submittedDate: opts.submittedDate != null ? opts.submittedDate : (r.date || ''),
     // Period stays open so the claim's receipt picker isn't pinned to a single day.
-    submittedDate: '', periodFrom: '', periodTo: '', reference: '',
+    periodFrom: '', periodTo: '', reference: opts.reference || '',
     claimedAmount: r.total, reimbursedAmount: 0, remark: r.remark || '',
     receiptIds: [r.id], createdAt: new Date().toISOString(),
   });
@@ -333,6 +335,10 @@ export function editReceipt(id) {
   const wrap = document.getElementById('editRecLinkWrap');
   const cb = document.getElementById('editRecApplyTx');
   if (r.txId) { wrap.classList.remove('hidden'); cb.checked = true; } else { wrap.classList.add('hidden'); cb.checked = false; }
+  // Claim-only fields: submission date defaults from the receipt Date; receipt number = claim reference.
+  const solo = linkedSoloClaim(r);
+  document.getElementById('editRecClaimSubmitted').value = (solo && solo.submittedDate) || r.date || '';
+  document.getElementById('editRecClaimReference').value = (solo && solo.reference) || '';
   updateEditClaimControls();
   document.getElementById('editReceiptModal').classList.remove('hidden');
 }
@@ -363,6 +369,30 @@ function updateEditClaimControls() {
   } else {
     wrap.classList.add('hidden');
     cb.checked = false;
+  }
+  updateEditClaimFieldVisibility();
+}
+
+// When the claim link is active, surface the claim-only fields (Submission Date, Receipt Number)
+// and hide the CC-only fields (Card / Bank Category / Internal Tag / Payment Method) — unless the
+// receipt is also on the ledger, where the card is still needed, so those stay visible.
+export function updateEditClaimFieldVisibility() {
+  const wrap = document.getElementById('editRecClaimLinkWrap');
+  const cb = document.getElementById('editRecApplyClaim');
+  if (!wrap || !cb) return;
+  const r = (database.receipts || []).find(x => x.id === document.getElementById('editRecId').value);
+  const claimActive = !wrap.classList.contains('hidden') && cb.checked;
+  const onLedger = !!(r && r.txId);
+  const claimFields = document.getElementById('editRecClaimFields');
+  if (claimFields) claimFields.classList.toggle('hidden', !claimActive);
+  const hideCC = claimActive && !onLedger;
+  ['editRecCardField', 'editRecCategoryField', 'editRecTagField', 'editRecPaymentField'].forEach(fid => {
+    const el = document.getElementById(fid);
+    if (el) el.classList.toggle('hidden', hideCC);
+  });
+  if (claimActive) {
+    const sub = document.getElementById('editRecClaimSubmitted');
+    if (sub && !sub.value) sub.value = (r && r.date) || document.getElementById('editRecDate').value || '';
   }
 }
 
@@ -408,14 +438,18 @@ export function handleReceiptEditSubmit(e) {
   // reaches the Claims tab fully populated — nothing to re-enter there.
   const soloClaim = linkedSoloClaim(r);
   const applyClaim = document.getElementById('editRecApplyClaim').checked;
+  const claimSubmitted = document.getElementById('editRecClaimSubmitted').value;
+  const claimReference = document.getElementById('editRecClaimReference').value.trim();
   if (soloClaim && applyClaim) {
     soloClaim.title = r.merchant || 'Receipt claim';
     soloClaim.type = r.claimType || soloClaim.type;
     soloClaim.status = r.claimStatus || soloClaim.status;
     soloClaim.claimedAmount = r.total;
     soloClaim.remark = r.remark;
+    soloClaim.submittedDate = claimSubmitted;
+    soloClaim.reference = claimReference;
   } else if (!r.claimId && applyClaim) {
-    r.claimId = createClaimFromReceipt(r);
+    r.claimId = createClaimFromReceipt(r, { submittedDate: claimSubmitted, reference: claimReference });
   }
 
   saveToLocalStorage();

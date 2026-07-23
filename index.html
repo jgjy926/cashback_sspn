@@ -1112,13 +1112,13 @@
                         <input type="number" step="0.01" id="editRecTotal" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
                     <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Currency</label>
                         <input type="text" id="editRecCurrency" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
-                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Card</label>
+                    <div id="editRecCardField"><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Card</label>
                         <select id="editRecCard" onchange="editRecCardChange()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
-                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Bank Category</label>
+                    <div id="editRecCategoryField"><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Bank Category</label>
                         <select id="editRecCategory" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
-                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Internal Tag</label>
+                    <div id="editRecTagField"><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Internal Tag</label>
                         <select id="editRecTag" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
-                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Payment Method</label>
+                    <div id="editRecPaymentField"><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Payment Method</label>
                         <select id="editRecPayment" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
                 </div>
                 <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Remark</label>
@@ -1129,12 +1129,18 @@
                     <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Claim Status</label>
                         <select id="editRecClaimStatus" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
                 </div>
+                <div id="editRecClaimFields" class="grid grid-cols-1 sm:grid-cols-2 gap-3 hidden">
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Submission Date</label>
+                        <input type="date" id="editRecClaimSubmitted" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Receipt Number</label>
+                        <input type="text" id="editRecClaimReference" placeholder="Claim reference / receipt no." class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                </div>
                 <div id="editRecLinkWrap" class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3 hidden">
                     <input type="checkbox" id="editRecApplyTx" class="w-4 h-4 rounded border-gray-800 text-indigo-500 bg-gray-950 focus:ring-indigo-500 cursor-pointer">
                     <label for="editRecApplyTx" class="text-xs font-semibold text-slate-300 cursor-pointer">Also apply these changes to the linked ledger transaction</label>
                 </div>
                 <div id="editRecClaimLinkWrap" class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3 hidden">
-                    <input type="checkbox" id="editRecApplyClaim" class="w-4 h-4 rounded border-gray-800 text-violet-500 bg-gray-950 focus:ring-violet-500 cursor-pointer">
+                    <input type="checkbox" id="editRecApplyClaim" onchange="updateEditClaimFieldVisibility()" class="w-4 h-4 rounded border-gray-800 text-violet-500 bg-gray-950 focus:ring-violet-500 cursor-pointer">
                     <label for="editRecApplyClaim" id="editRecApplyClaimLabel" class="text-xs font-semibold text-slate-300 cursor-pointer">Also apply these changes to the linked claim</label>
                 </div>
                 <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition">Save Changes</button>
@@ -1214,7 +1220,7 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.07.06-3';
+      window.APP_VERSION = '2026.07.06-4';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','dashboard','dropdowns',
