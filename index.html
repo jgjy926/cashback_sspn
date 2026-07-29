@@ -59,6 +59,9 @@
                     <button onclick="switchTab('claims')" id="tabBtn-claims" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
                         <i class="fa-solid fa-file-medical mr-1.5"></i>Claims
                     </button>
+                    <button onclick="switchTab('medical')" id="tabBtn-medical" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
+                        <i class="fa-solid fa-pills mr-1.5"></i>Medical Records
+                    </button>
                     <button onclick="switchTab('koofrSync')" id="tabBtn-koofrSync" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
                         <i class="fa-solid fa-cloud mr-1.5"></i>Koofr Sync
                     </button>
@@ -741,8 +744,9 @@
 
                 <label for="receiptFile" class="flex flex-col items-center justify-center gap-2 cursor-pointer bg-gray-950 border border-dashed border-gray-700 hover:border-indigo-500 rounded-xl py-8 transition">
                     <i class="fa-solid fa-camera text-2xl text-indigo-400"></i>
-                    <span class="text-xs font-semibold text-slate-300">Take photo / choose image</span>
-                    <input type="file" id="receiptFile" accept="image/*" onchange="handleReceiptFile(this)" class="hidden">
+                    <span class="text-xs font-semibold text-slate-300">Take photo(s) / choose image(s)</span>
+                    <span class="text-[10px] text-slate-500">Camera or gallery · add several for a medical visit</span>
+                    <input type="file" id="receiptFile" accept="image/*" multiple onchange="handleReceiptFile(this)" class="hidden">
                 </label>
 
                 <label class="flex items-center justify-center gap-2 text-[10px] text-slate-400 cursor-pointer select-none">
@@ -753,6 +757,8 @@
                 <div id="receiptPreviewWrap" hidden class="space-y-2">
                     <img id="receiptPreview" alt="Receipt preview" class="max-h-64 mx-auto rounded-xl border border-gray-800">
                     <p id="receiptSizeInfo" class="text-[10px] text-center text-slate-500 font-mono"></p>
+                    <div id="receiptThumbs" class="flex flex-wrap gap-2 justify-center"></div>
+                    <label for="receiptFile" class="block text-center text-[10px] text-indigo-400 hover:text-indigo-300 cursor-pointer font-semibold"><i class="fa-solid fa-plus mr-1"></i>Add another photo</label>
                     <button type="button" onclick="runReceiptOcr()" id="receiptScanBtn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition flex items-center justify-center gap-2">
                         <i class="fa-solid fa-wand-magic-sparkles"></i>Scan with OCR
                     </button>
@@ -819,6 +825,11 @@
                     <div class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3">
                         <input type="checkbox" id="recLinkClaim" class="w-4 h-4 rounded border-gray-800 text-violet-500 bg-gray-950 focus:ring-violet-500 cursor-pointer">
                         <label for="recLinkClaim" class="text-xs font-semibold text-slate-300 cursor-pointer">Create a claim entry in the Claims tab from this receipt — auto-filled, nothing to re-enter</label>
+                    </div>
+
+                    <div class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3">
+                        <input type="checkbox" id="recLogMedical" class="w-4 h-4 rounded border-gray-800 text-teal-500 bg-gray-950 focus:ring-teal-500 cursor-pointer">
+                        <label for="recLogMedical" class="text-xs font-semibold text-slate-300 cursor-pointer">Log to Medicine &amp; Records — stores all photos + raw OCR for enrichment</label>
                     </div>
 
                     <details class="bg-gray-950 border border-gray-800 rounded-xl p-3">
@@ -985,6 +996,90 @@
                     <div class="glass-card rounded-2xl p-6">
                         <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3">Claims by Status</h3>
                         <div class="h-56"><canvas id="claimStatusChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= Medical Records ================= -->
+        <section id="tabContent-medical" class="hidden space-y-6">
+            <!-- KPI dashboard -->
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Total</span>
+                    <h2 id="medKpiTotal" class="text-lg font-bold text-slate-100 font-mono">RM 0.00</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Insurance Covered</span>
+                    <h2 id="medKpiInsurance" class="text-lg font-bold text-sky-400 font-mono">RM 0.00</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Patient Covered</span>
+                    <h2 id="medKpiPatient" class="text-lg font-bold text-amber-400 font-mono">RM 0.00</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Visits</span>
+                    <h2 id="medKpiVisits" class="text-lg font-bold text-indigo-400 font-mono">0</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Medicines</span>
+                    <h2 id="medKpiMeds" class="text-lg font-bold text-violet-400 font-mono">0</h2>
+                </div>
+            </div>
+
+            <!-- Toolbar: filters + actions -->
+            <div class="glass-card rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                <div class="flex flex-wrap gap-2">
+                    <select id="medFilterYear" onchange="onMedicalFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold"><option value="ALL">All Years</option></select>
+                    <select id="medFilterMonth" onchange="onMedicalFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
+                        <option value="ALL">All Months</option>
+                        <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+                        <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+                        <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+                        <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+                    </select>
+                    <select id="medFilterMerchant" onchange="onMedicalFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold"><option value="ALL">All Merchants</option></select>
+                    <input type="search" id="medFilterMedicine" oninput="onMedicalFilterChange()" placeholder="Search medicine…" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 w-40">
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="openMedicalModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-plus mr-1"></i>Add Record</button>
+                    <button onclick="exportMedicalRaw(false)" title="Export un-enriched records to send to Claude" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-200 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-file-export mr-1"></i>Export raw</button>
+                    <button onclick="exportMedicalRaw(true)" title="Export all records" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-400 font-bold py-2 px-2.5 rounded-xl text-[11px] uppercase tracking-wider transition">All</button>
+                    <label for="medImportFile" class="cursor-pointer bg-gray-900 border border-gray-800 hover:border-emerald-500 text-slate-200 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition inline-flex items-center"><i class="fa-solid fa-file-import mr-1"></i>Import JSON</label>
+                    <input type="file" id="medImportFile" accept="application/json,.json" onchange="handleMedicalImportFile(this)" class="hidden">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 glass-card rounded-2xl p-6 space-y-3">
+                    <div class="border-b border-gray-800 pb-3">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200">Medical Records</h3>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Raw OCR captured from receipts; enrich via Claude (Export → import) or edit by hand.</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="text-[9px] uppercase tracking-wider text-slate-500 border-b border-gray-800">
+                                <tr>
+                                    <th class="py-2 px-4">Record</th>
+                                    <th class="py-2 px-4 text-right">Insurance</th>
+                                    <th class="py-2 px-4 text-right">Patient</th>
+                                    <th class="py-2 px-4 text-right">Total</th>
+                                    <th class="py-2 px-4 text-center">Meds</th>
+                                    <th class="py-2 px-4 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="medLedgerBody" class="divide-y divide-gray-800/60 text-slate-300"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="space-y-6">
+                    <div class="glass-card rounded-2xl p-6">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3">Spend by Month</h3>
+                        <div class="h-48"><canvas id="medTrendChart"></canvas></div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-6">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3">Insurance vs Patient</h3>
+                        <div class="h-48"><canvas id="medSplitChart"></canvas></div>
                     </div>
                 </div>
             </div>
@@ -1210,6 +1305,57 @@
         </div>
     </div>
 
+    <!-- Medical Record Modal -->
+    <div id="medicalModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="glass-card w-full max-w-lg rounded-2xl p-6 space-y-4 m-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <h3 id="medModalTitle" class="text-sm font-bold text-indigo-400 uppercase tracking-widest"><i class="fa-solid fa-pills mr-1.5"></i>Medical Record</h3>
+                <button onclick="closeMedicalModal()" class="text-slate-400 hover:text-slate-100"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="medicalForm" onsubmit="handleMedicalSubmit(event)" class="space-y-3">
+                <input type="hidden" id="medRecId">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Date</label>
+                        <input type="date" id="medRecDate" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Merchant / Clinic</label>
+                        <input type="text" id="medRecMerchant" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Currency</label>
+                        <input type="text" id="medRecCurrency" value="MYR" oninput="medRecalc()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Consultation</label>
+                        <input type="number" step="0.01" id="medRecConsultation" oninput="medRecalc()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Covered by Insurance</label>
+                        <input type="number" step="0.01" id="medRecInsurance" oninput="medRecalc()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-sky-300 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Covered by Patient</label>
+                        <input type="number" step="0.01" id="medRecPatient" oninput="medRecalc()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-amber-300 focus:outline-none"></div>
+                </div>
+
+                <div class="flex items-center justify-between bg-gray-950 border border-gray-800/80 rounded-xl px-3 py-2">
+                    <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total (Insurance + Patient)</span>
+                    <span id="medRecTotalDisplay" class="text-sm font-bold text-slate-100 font-mono">MYR 0.00</span>
+                </div>
+                <p id="medRecReconcile" class="text-[10px] text-rose-400 hidden"></p>
+
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Medicines</label>
+                        <button type="button" onclick="addMedicineRow()" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold"><i class="fa-solid fa-plus mr-1"></i>Add medicine</button>
+                    </div>
+                    <div id="medMedicineRows" class="space-y-2"></div>
+                </div>
+
+                <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Remark</label>
+                    <input type="text" id="medRecRemark" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+
+                <details class="bg-gray-950 border border-gray-800 rounded-xl p-3">
+                    <summary class="text-[10px] uppercase tracking-wider text-slate-400 font-bold cursor-pointer">Raw OCR (source for export)</summary>
+                    <textarea id="medRecRawOcr" readonly class="w-full h-24 mt-2 bg-gray-900 border border-gray-800 rounded-lg px-2 py-1.5 text-[10px] text-slate-400 font-mono"></textarea>
+                </details>
+
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition">Save Record</button>
+            </form>
+        </div>
+    </div>
+
     <!--
       Cache-busting module loader. GitHub Pages serves src/*.js with a fixed
       Cache-Control: max-age=600, and ES module sub-imports (./calc.js etc.) do
@@ -1220,12 +1366,12 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.07.06-4';
+      window.APP_VERSION = '2026.07.06-5';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','dashboard','dropdowns',
           'ui','charts','calc','cards','optimizer','sspn','transactions',
-          'claims','autosync','receipts','ocr','excel','main'];
+          'claims','medical','autosync','receipts','ocr','excel','main'];
         var imports = {};
         mods.forEach(function (m) { imports['./src/' + m + '.js'] = './src/' + m + '.js?v=' + v; });
         var im = document.createElement('script');

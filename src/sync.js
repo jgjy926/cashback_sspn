@@ -6,6 +6,7 @@ import { askConfirm, showToast, switchTab } from './ui.js';
 import { gatewayConfig } from './config.js';
 import { renderReceipts, renderReceiptCalendar } from './receipts.js';
 import { renderClaims } from './claims.js';
+import { renderMedical } from './medical.js';
 import { setSyncStatus } from './autosync.js';
 
 function saveSyncSettings() {
@@ -70,6 +71,7 @@ function applyPull(cloudDb, { silent = false } = {}) {
   renderReceipts();          // refresh the Receipts tab with the pulled data
   renderReceiptCalendar();   // keep the calendar in sync
   renderClaims();            // refresh the Claims tab/dashboard
+  renderMedical();           // refresh the Medical Records tab/dashboard
   setSyncStatus('synced');
   if (!silent) showToast('Workspace database sync load complete!', 'success');
 }

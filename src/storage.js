@@ -23,6 +23,7 @@ export function migrate(db) {
   if (typeof db.schemaVersion !== 'number') db.schemaVersion = SCHEMA_VERSION;
   if (!Array.isArray(db.receipts)) db.receipts = [];
   if (!Array.isArray(db.claims)) db.claims = [];
+  if (!Array.isArray(db.medicalRecords)) db.medicalRecords = [];
   if (!db.settings) db.settings = {};
   // Config-driven claim taxonomy — adding a type/status here needs no code change.
   if (!Array.isArray(db.settings.claimTypes)) db.settings.claimTypes = ['Medical', 'Insurance', 'Tax Relief'];

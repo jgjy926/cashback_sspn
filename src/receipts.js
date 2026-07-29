@@ -2,12 +2,18 @@ import { database } from './state.js';
 import { saveToLocalStorage } from './storage.js';
 import { refreshLedgerAndCalculations } from './dashboard.js';
 import { renderClaims } from './claims.js';
+import { createMedicalRecordFromReceipt, renderMedical } from './medical.js';
 import { showToast } from './ui.js';
 import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant,
   aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD, AI_FIELD_CEILING } from './ocr.js';
 import { gatewayConfig } from './config.js';
 
-let pending = null; // { blob (hi-res for storage), ocrBlob (<=1MB for OCR), dataUrl, width, height, ocrText }
+// Multi-photo capture. `pendingPhotos[0]` is the PRIMARY photo used by the existing receipt /
+// ledger / claim flows (via `pending`); any extra photos are grouped into a Medicine & Records
+// entry when the medical tick is on. This keeps the single-photo BAU path unchanged.
+let pendingPhotos = []; // each: { blob (hi-res store), ocrBlob (<=1MB OCR), dataUrl, width, height, ocrText }
+let pending = null;     // live reference to pendingPhotos[0]
+function syncPending() { pending = pendingPhotos[0] || null; }
 
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
@@ -93,22 +99,57 @@ function receiptClaimBadge(status) {
 
 // ---------- capture + OCR ----------
 export async function handleReceiptFile(input) {
-  const file = input.files && input.files[0];
-  if (!file) return;
+  const files = [...(input.files || [])];
+  input.value = ''; // allow re-selecting the same file, and appending more photos later
+  if (!files.length) return;
+  const status = document.getElementById('receiptOcrStatus');
   try {
-    // Two copies: a hi-res one to store (sharp on zoom) and a <=1 MB one for OCR.
-    const store = await compressForStorage(file);
-    const ocr = await compressImage(file);
-    pending = { blob: store.blob, ocrBlob: ocr.blob, dataUrl: await blobToDataUrl(store.blob), width: store.width, height: store.height, ocrText: '' };
+    for (let i = 0; i < files.length; i++) {
+      if (files.length > 1) status.innerText = `Preparing photo ${i + 1}/${files.length}…`;
+      // Two copies per photo: a hi-res one to store (sharp on zoom) and a <=1 MB one for OCR.
+      const store = await compressForStorage(files[i]);
+      const ocr = await compressImage(files[i]);
+      pendingPhotos.push({ blob: store.blob, ocrBlob: ocr.blob, dataUrl: await blobToDataUrl(store.blob), width: store.width, height: store.height, ocrText: '' });
+    }
+    syncPending();
     document.getElementById('receiptPreview').src = pending.dataUrl;
     document.getElementById('receiptPreviewWrap').hidden = false;
-    document.getElementById('receiptSizeInfo').innerText = `${store.width}×${store.height}px · ${(store.blob.size / 1024).toFixed(0)} KB`;
+    document.getElementById('receiptSizeInfo').innerText = `${pending.width}×${pending.height}px · ${(pending.blob.size / 1024).toFixed(0)} KB`;
+    renderReceiptThumbs();
     document.getElementById('receiptOcrStatus').innerText = '';
     document.getElementById('receiptForm').hidden = true;
-    showToast('Photo ready. Tap "Scan with OCR".');
+    showToast(pendingPhotos.length > 1 ? `${pendingPhotos.length} photos ready. Tap “Scan with OCR”.` : 'Photo ready. Tap "Scan with OCR".');
   } catch (err) {
+    status.innerText = '';
     showToast(err.message, 'error');
   }
+}
+
+// Thumbnail strip (only shown once there is more than one photo).
+function renderReceiptThumbs() {
+  const box = document.getElementById('receiptThumbs');
+  if (!box) return;
+  if (pendingPhotos.length <= 1) { box.innerHTML = ''; return; }
+  box.innerHTML = pendingPhotos.map((p, i) => `
+    <div class="relative">
+      <img src="${p.dataUrl}" class="h-14 w-14 object-cover rounded-lg border ${i === 0 ? 'border-indigo-500' : 'border-gray-800'}">
+      <button type="button" onclick="removeReceiptPhoto(${i})" class="absolute -top-1.5 -right-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px]"><i class="fa-solid fa-xmark"></i></button>
+      ${i === 0 ? '<span class="absolute bottom-0 left-0 bg-indigo-600 text-white text-[7px] px-1 rounded-tr">1st</span>' : ''}
+    </div>`).join('');
+}
+
+export function removeReceiptPhoto(i) {
+  pendingPhotos.splice(i, 1);
+  syncPending();
+  if (!pendingPhotos.length) {
+    document.getElementById('receiptPreviewWrap').hidden = true;
+    document.getElementById('receiptForm').hidden = true;
+    renderReceiptThumbs();
+    return;
+  }
+  document.getElementById('receiptPreview').src = pending.dataUrl;
+  document.getElementById('receiptSizeInfo').innerText = `${pending.width}×${pending.height}px · ${(pending.blob.size / 1024).toFixed(0)} KB`;
+  renderReceiptThumbs();
 }
 
 export async function runReceiptOcr() {
@@ -116,8 +157,12 @@ export async function runReceiptOcr() {
   const status = document.getElementById('receiptOcrStatus');
   status.innerText = 'Scanning… this can take a few seconds.';
   try {
-    const text = await runOcr(pending.ocrBlob);
-    pending.ocrText = text;
+    // OCR every photo: the primary drives the confirm form; all photos feed the medical raw text.
+    for (let i = 0; i < pendingPhotos.length; i++) {
+      if (pendingPhotos.length > 1) status.innerText = `Scanning photo ${i + 1}/${pendingPhotos.length}…`;
+      pendingPhotos[i].ocrText = await runOcr(pendingPhotos[i].ocrBlob);
+    }
+    const text = pending.ocrText;
     let parsed = parseReceiptText(text);
 
     // Free, gated AI second opinion — fires when the scan is low-confidence overall OR when the
@@ -199,6 +244,7 @@ export async function saveReceipt(e) {
   const paymentMethod = document.getElementById('recPayment').value;
   const alsoLog = document.getElementById('recAlsoLog').checked;
   const linkClaim = document.getElementById('recLinkClaim').checked;
+  const logMedical = document.getElementById('recLogMedical').checked;
 
   let txId = null;
   if (alsoLog && total > 0 && cardId) {
@@ -217,6 +263,27 @@ export async function saveReceipt(e) {
   if (linkClaim) receipt.claimId = createClaimFromReceipt(receipt);
   const claimId = receipt.claimId;
 
+  // Log to Medicine & Records: group ALL photos (primary + extras) and the combined raw OCR.
+  // The primary is already stored as receipt/<id>; upload the extras under their own ids.
+  let medId = null;
+  if (logMedical) {
+    const imagePaths = [`receipt/${id}`];
+    for (let i = 1; i < pendingPhotos.length; i++) {
+      const pid = 'rcpt-' + Date.now() + Math.random().toString(36).slice(2, 6);
+      try {
+        const res = await fetch(`${base}/receipt/${pid}`, {
+          method: 'PUT',
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'image/jpeg' },
+          body: pendingPhotos[i].blob,
+        });
+        if (res.ok) imagePaths.push(`receipt/${pid}`);
+        else showToast(`Photo ${i + 1} upload failed — skipped.`, 'error');
+      } catch { showToast(`Photo ${i + 1} upload failed — skipped.`, 'error'); }
+    }
+    const rawOcr = pendingPhotos.map(p => p.ocrText || '').filter(Boolean).join('\n\n---\n\n');
+    medId = createMedicalRecordFromReceipt(receipt, { imagePaths, rawOcr });
+  }
+
   // Self-learning: remember the merchant the user confirmed for these receipt tokens.
   learnMerchant(pending.ocrText, merchant);
 
@@ -224,15 +291,18 @@ export async function saveReceipt(e) {
   refreshLedgerAndCalculations();
   renderReceipts();
   renderClaims();
+  renderMedical();
 
+  pendingPhotos = [];
   pending = null;
   const form = document.getElementById('receiptForm');
   form.reset();
   form.hidden = true;
   document.getElementById('receiptPreviewWrap').hidden = true;
+  document.getElementById('receiptThumbs').innerHTML = '';
   document.getElementById('receiptFile').value = '';
   document.getElementById('receiptOcrStatus').innerText = '';
-  const dest = [txId && 'ledger', claimId && 'claims'].filter(Boolean).join(' & ');
+  const dest = [txId && 'ledger', claimId && 'claims', medId && 'medical records'].filter(Boolean).join(' & ');
   showToast(dest ? `Receipt saved (added to ${dest}).` : 'Receipt saved.', 'success');
 }
 

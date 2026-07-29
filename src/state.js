@@ -1,12 +1,13 @@
 // Shared application state. The database object is a live ES export reassigned
 // only through setDatabase(); the four UI flags are reassigned through their setters.
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export let database = {
             transactions: [],
             sspnRecords: [],
             receipts: [],
             claims: [],
+            medicalRecords: [],
             cards: [
                 { 
                     id: "Maybank2Gold", 
