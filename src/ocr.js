@@ -170,17 +170,35 @@ export async function compressForStorage(file, { maxEdge = 2400, quality = 0.85 
 }
 
 // Send a compressed image blob to the gateway's OCR route. Returns extracted text.
-export async function runOcr(blob) {
+// Each attempt is bounded by a timeout so a slow/stalled OCR provider can't hang the scan
+// "forever"; a transient provider blip (timeout, 5xx, or 429) is retried once.
+export async function runOcr(blob, { timeoutMs = 25000, retries = 1 } = {}) {
   const { base, token } = gatewayConfig();
   if (!base || !token) throw new Error('Set the gateway URL and access token in the Koofr Sync tab first.');
-  const res = await fetch(base + '/ocr', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'image/jpeg' },
-    body: blob,
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok || !data) throw new Error((data && data.error) || `OCR failed (${res.status})`);
-  return data.text || '';
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(base + '/ocr', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'image/jpeg' },
+        body: blob, signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      const data = await res.json().catch(() => null);
+      if (res.ok && data && typeof data.text === 'string') return data.text;
+      lastErr = new Error((data && data.error) || `OCR failed (${res.status})`);
+      // Retry only transient failures (provider 5xx / rate-limit); give up on client errors.
+      if (res.status < 500 && res.status !== 429) break;
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = (err && err.name === 'AbortError')
+        ? new Error('OCR timed out — the provider is slow right now. Please try again.')
+        : err;
+    }
+  }
+  throw lastErr;
 }
 
 // ---------- AI review (free Cloudflare Workers AI fallback) ----------

@@ -163,41 +163,65 @@ export async function runReceiptOcr() {
       pendingPhotos[i].ocrText = await runOcr(pendingPhotos[i].ocrBlob);
     }
     const text = pending.ocrText;
-    let parsed = parseReceiptText(text);
+    const parsed = parseReceiptText(text);
 
-    // Free, gated AI second opinion — fires when the scan is low-confidence overall OR when the
-    // merchant specifically is untrusted (a guess or a weak learned match), so AI can correct it.
-    let aiUsed = false;
-    if (text && aiReviewEnabled() && (parsed.confidence.overall < AI_REVIEW_THRESHOLD || parsed.confidence.merchant < AI_FIELD_CEILING)) {
-      status.innerText = 'Low confidence — asking AI to double-check…';
-      const merged = mergeAiReview(parsed, await runAiReview(text));
-      parsed = merged.parsed;
-      aiUsed = merged.changed;
-    }
-    const { merchant, date, total, merchantSource, confidence } = parsed;
-    document.getElementById('recCard').innerHTML = cardOptions();
-    document.getElementById('recTag').innerHTML = tagOptions();
-    document.getElementById('recClaimType').innerHTML = claimTypeOptions();
-    document.getElementById('recClaimStatus').innerHTML = claimStatusOptions();
-    document.getElementById('recPayment').innerHTML = paymentMethodOptions();
-    recCardChange();
-    recClaimTypeChange(); // arm claim routing to match the pre-selected claim type
-    document.getElementById('recMerchant').value = merchant || '';
-    document.getElementById('recDate').value = date || new Date().toISOString().slice(0, 10);
-    document.getElementById('recTotal').value = total != null ? total.toFixed(2) : '';
-    document.getElementById('recOcrText').value = text;
-    document.getElementById('receiptForm').hidden = false;
-    if (!text) {
-      status.innerText = 'No text detected — enter details manually.';
-    } else {
-      const pct = n => Math.round(n * 100) + '%';
-      const src = { learned: 'learned from your past edits', known: 'matched a configured retailer', ai: 'AI extracted', guess: 'best guess', none: 'not found' }[merchantSource] || 'best guess';
-      status.innerText = `Scanned (${pct(confidence.overall)} overall)${aiUsed ? ' · AI-assisted' : ''}. Merchant: ${src} (${pct(confidence.merchant)}) · Amount (${pct(confidence.total)}). Please verify below.`;
+    // Show the parsed result IMMEDIATELY (fast) — the AI double-check no longer blocks the scan.
+    fillReceiptForm(parsed, text);
+
+    // Gated AI second opinion runs in the BACKGROUND, only when the merchant is untrusted, and
+    // only touches fields you haven't edited. Keeps scans fast while still correcting weak reads.
+    if (text && aiReviewEnabled() && parsed.confidence.merchant < AI_FIELD_CEILING) {
+      aiRefineInBackground(text, parsed);
     }
   } catch (err) {
     status.innerText = '';
     showToast(err.message, 'error');
   }
+}
+
+// Populate the confirm form from a parsed scan (no network — instant).
+function fillReceiptForm(parsed, text) {
+  const { merchant, date, total, merchantSource, confidence } = parsed;
+  document.getElementById('recCard').innerHTML = cardOptions();
+  document.getElementById('recTag').innerHTML = tagOptions();
+  document.getElementById('recClaimType').innerHTML = claimTypeOptions();
+  document.getElementById('recClaimStatus').innerHTML = claimStatusOptions();
+  document.getElementById('recPayment').innerHTML = paymentMethodOptions();
+  recCardChange();
+  recClaimTypeChange(); // arm claim routing to match the pre-selected claim type
+  document.getElementById('recMerchant').value = merchant || '';
+  document.getElementById('recDate').value = date || new Date().toISOString().slice(0, 10);
+  document.getElementById('recTotal').value = total != null ? total.toFixed(2) : '';
+  document.getElementById('recOcrText').value = text;
+  document.getElementById('receiptForm').hidden = false;
+  const status = document.getElementById('receiptOcrStatus');
+  if (!text) {
+    status.innerText = 'No text detected — enter details manually.';
+  } else {
+    const pct = n => Math.round(n * 100) + '%';
+    const src = { learned: 'learned from your past edits', known: 'matched a configured retailer', ai: 'AI extracted', guess: 'best guess', none: 'not found' }[merchantSource] || 'best guess';
+    status.innerText = `Scanned (${pct(confidence.overall)} overall). Merchant: ${src} (${pct(confidence.merchant)}) · Amount (${pct(confidence.total)}). Please verify below.`;
+  }
+}
+
+// Background AI refine: apply AI's better fields only where the user hasn't already edited them.
+function aiRefineInBackground(text, parsed) {
+  const merchantEl = document.getElementById('recMerchant');
+  const dateEl = document.getElementById('recDate');
+  const totalEl = document.getElementById('recTotal');
+  const status = document.getElementById('receiptOcrStatus');
+  const filled = { merchant: merchantEl.value, date: dateEl.value, total: totalEl.value };
+  const baseNote = status.innerText;
+  status.innerText = baseNote + ' · AI double-checking…';
+  runAiReview(text).then(ai => {
+    const merged = mergeAiReview(parsed, ai);
+    if (!merged.changed) { status.innerText = baseNote; return; }
+    const p = merged.parsed;
+    if (p.merchant && merchantEl.value === filled.merchant) merchantEl.value = p.merchant;
+    if (p.date && dateEl.value === filled.date) dateEl.value = p.date;
+    if (p.total != null && totalEl.value === filled.total) totalEl.value = p.total.toFixed(2);
+    status.innerText = baseNote + ' · AI-assisted ✓';
+  }).catch(() => { status.innerText = baseNote; });
 }
 
 export function recCardChange() {
