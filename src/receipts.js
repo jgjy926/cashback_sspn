@@ -15,6 +15,13 @@ let pendingPhotos = []; // each: { blob (hi-res store), ocrBlob (<=1MB OCR), dat
 let pending = null;     // live reference to pendingPhotos[0]
 function syncPending() { pending = pendingPhotos[0] || null; }
 
+// Raw OCR across ALL captured photos, labelled per photo — shown in the "Raw OCR Text" panel and
+// stored on the medical record, so a multi-photo visit's full text is visible and exportable.
+function combinedOcrText() {
+  if (pendingPhotos.length <= 1) return (pending && pending.ocrText) || '';
+  return pendingPhotos.map((p, i) => `— Photo ${i + 1} —\n${p.ocrText || '(not scanned)'}`).join('\n\n');
+}
+
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -182,7 +189,7 @@ export async function runReceiptOcr() {
       aiRefineInBackground(text, parsed);
     }
   } else {
-    document.getElementById('recOcrText').value = text;
+    document.getElementById('recOcrText').value = combinedOcrText();
   }
 
   document.getElementById('receiptManualBtn')?.classList.remove('hidden');
@@ -218,7 +225,7 @@ function fillReceiptForm(parsed, text) {
   document.getElementById('recMerchant').value = merchant || '';
   document.getElementById('recDate').value = date || new Date().toISOString().slice(0, 10);
   document.getElementById('recTotal').value = total != null ? total.toFixed(2) : '';
-  document.getElementById('recOcrText').value = text;
+  document.getElementById('recOcrText').value = combinedOcrText();
   document.getElementById('receiptForm').hidden = false;
   const status = document.getElementById('receiptOcrStatus');
   if (!text) {
@@ -330,8 +337,7 @@ export async function saveReceipt(e) {
         else showToast(`Photo ${i + 1} upload failed — skipped.`, 'error');
       } catch { showToast(`Photo ${i + 1} upload failed — skipped.`, 'error'); }
     }
-    const rawOcr = pendingPhotos.map(p => p.ocrText || '').filter(Boolean).join('\n\n---\n\n');
-    medId = createMedicalRecordFromReceipt(receipt, { imagePaths, rawOcr });
+    medId = createMedicalRecordFromReceipt(receipt, { imagePaths, rawOcr: combinedOcrText() });
   }
 
   // Self-learning: remember the merchant the user confirmed for these receipt tokens.
@@ -690,6 +696,15 @@ export function selectReceiptDay(dateStr) {
 export function clearReceiptDay() {
   selectedDay = null;
   renderReceipts();
+}
+
+// The calendar is collapsed by default; this expands/collapses it on tap.
+export function toggleReceiptCalendar() {
+  const body = document.getElementById('receiptCalendarBody');
+  const chev = document.getElementById('receiptCalendarChevron');
+  if (!body) return;
+  const collapsed = body.classList.toggle('hidden');
+  if (chev) chev.className = `fa-solid fa-chevron-${collapsed ? 'right' : 'down'} text-slate-400 text-xs`;
 }
 
 export function renderReceiptCalendar() {

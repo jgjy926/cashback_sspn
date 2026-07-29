@@ -844,21 +844,24 @@
                 </form>
             </div>
 
-            <!-- Calendar view -->
+            <!-- Calendar view (collapsed by default) -->
             <div class="glass-card rounded-2xl p-6 space-y-3">
-                <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+                <button type="button" onclick="toggleReceiptCalendar()" class="w-full flex items-center gap-2 text-left">
+                    <i id="receiptCalendarChevron" class="fa-solid fa-chevron-right text-slate-400 text-xs"></i>
                     <div>
                         <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200"><i class="fa-solid fa-calendar-days text-indigo-400 mr-1.5"></i>Calendar</h3>
-                        <p class="text-[10px] text-slate-500 mt-0.5">Tap a highlighted day to see that day's receipts and a quick breakdown.</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Tap to expand · highlighted days have receipts.</p>
                     </div>
-                    <div class="flex items-center gap-2">
+                </button>
+                <div id="receiptCalendarBody" class="hidden space-y-3 border-t border-gray-800 pt-3">
+                    <div class="flex items-center justify-end gap-2">
                         <button onclick="receiptCalShift(-1)" class="text-slate-400 hover:text-slate-100 px-2 py-1"><i class="fa-solid fa-chevron-left"></i></button>
                         <span id="receiptCalendarLabel" class="text-xs font-bold text-slate-200 min-w-[110px] text-center"></span>
                         <button onclick="receiptCalShift(1)" class="text-slate-400 hover:text-slate-100 px-2 py-1"><i class="fa-solid fa-chevron-right"></i></button>
                     </div>
+                    <div id="receiptCalendarGrid" class="grid grid-cols-7 gap-1"></div>
+                    <div id="receiptDayKpi" class="hidden bg-gray-950/40 border border-gray-800/60 rounded-xl p-3"></div>
                 </div>
-                <div id="receiptCalendarGrid" class="grid grid-cols-7 gap-1"></div>
-                <div id="receiptDayKpi" class="hidden bg-gray-950/40 border border-gray-800/60 rounded-xl p-3"></div>
             </div>
 
             <div class="glass-card rounded-2xl p-6 space-y-3">
@@ -1367,7 +1370,7 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.07.06-8';
+      window.APP_VERSION = '2026.07.06-9';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','dashboard','dropdowns',
