@@ -155,28 +155,45 @@ export function removeReceiptPhoto(i) {
 export async function runReceiptOcr() {
   if (!pending) { showToast('Choose or capture a photo first.', 'error'); return; }
   const status = document.getElementById('receiptOcrStatus');
+  const formWasHidden = document.getElementById('receiptForm').hidden;
   status.innerText = 'Scanning… this can take a few seconds.';
-  try {
-    // OCR every photo: the primary drives the confirm form; all photos feed the medical raw text.
-    for (let i = 0; i < pendingPhotos.length; i++) {
-      if (pendingPhotos.length > 1) status.innerText = `Scanning photo ${i + 1}/${pendingPhotos.length}…`;
+
+  // OCR each photo INDEPENDENTLY so a failure on one never discards the others' text. A failed
+  // attempt keeps whatever text the photo already had, so re-scanning can only add, never lose.
+  let failed = 0;
+  for (let i = 0; i < pendingPhotos.length; i++) {
+    if (pendingPhotos.length > 1) status.innerText = `Scanning photo ${i + 1}/${pendingPhotos.length}…`;
+    try {
       pendingPhotos[i].ocrText = await runOcr(pendingPhotos[i].ocrBlob);
+    } catch {
+      pendingPhotos[i].ocrText = pendingPhotos[i].ocrText || '';
+      failed++;
     }
-    const text = pending.ocrText;
-    const parsed = parseReceiptText(text);
+  }
 
-    // Show the parsed result IMMEDIATELY (fast) — the AI double-check no longer blocks the scan.
+  // The form uses the primary photo's text, or the first photo that produced any.
+  const text = pending.ocrText || pendingPhotos.map(p => p.ocrText).find(Boolean) || '';
+  const parsed = parseReceiptText(text);
+
+  // Fill the form only on the first scan; a re-scan (to capture a failed photo) keeps your edits.
+  if (formWasHidden) {
     fillReceiptForm(parsed, text);
-
-    // Gated AI second opinion runs in the BACKGROUND, only when the merchant is untrusted, and
-    // only touches fields you haven't edited. Keeps scans fast while still correcting weak reads.
     if (text && aiReviewEnabled() && parsed.confidence.merchant < AI_FIELD_CEILING) {
       aiRefineInBackground(text, parsed);
     }
-  } catch (err) {
-    status.innerText = 'OCR unavailable right now — you can still enter the details manually below.';
-    showToast(`${err.message} Tap “Enter details manually”.`, 'error');
-    document.getElementById('receiptManualBtn')?.classList.remove('hidden');
+  } else {
+    document.getElementById('recOcrText').value = text;
+  }
+
+  document.getElementById('receiptManualBtn')?.classList.remove('hidden');
+  if (failed) {
+    const all = failed === pendingPhotos.length;
+    status.innerText = all
+      ? 'OCR unavailable right now — enter the details manually below, or tap Scan to retry.'
+      : `${pendingPhotos.length - failed}/${pendingPhotos.length} photos scanned. Tap Scan again to retry the rest — their images still save.`;
+    showToast(all
+      ? 'OCR provider is slow/down. Enter details manually or retry.'
+      : `${failed} of ${pendingPhotos.length} photos couldn't be scanned — retry with Scan; their images are kept either way.`, 'error');
   }
 }
 
