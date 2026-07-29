@@ -174,9 +174,18 @@ export async function runReceiptOcr() {
       aiRefineInBackground(text, parsed);
     }
   } catch (err) {
-    status.innerText = '';
-    showToast(err.message, 'error');
+    status.innerText = 'OCR unavailable right now — you can still enter the details manually below.';
+    showToast(`${err.message} Tap “Enter details manually”.`, 'error');
+    document.getElementById('receiptManualBtn')?.classList.remove('hidden');
   }
+}
+
+// Backup for when the OCR provider is slow/down: reveal the confirm form with blank fields so a
+// receipt (photo + typed details) can still be saved with no OCR call at all.
+export function skipOcrManualEntry() {
+  if (!pending) { showToast('Capture a photo first.', 'error'); return; }
+  fillReceiptForm({ merchant: '', date: '', total: null, merchantSource: 'none', confidence: { overall: 0, merchant: 0, total: 0, date: 0 } }, pending.ocrText || '');
+  document.getElementById('receiptOcrStatus').innerText = 'Manual entry — OCR skipped. Fill in the details below and Save.';
 }
 
 // Populate the confirm form from a parsed scan (no network — instant).

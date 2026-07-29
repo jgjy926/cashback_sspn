@@ -129,22 +129,37 @@ async function handle(request, env) {
     if (buf.byteLength > MAX_IMAGE_BYTES) {
       return json({ error: `Image too large for OCR (${buf.byteLength} > ${MAX_IMAGE_BYTES})` }, 413, env);
     }
-    const form = new FormData();
-    form.append('apikey', env.OCR_API_KEY);
-    form.append('language', 'eng');
-    form.append('scale', 'true');
-    form.append('OCREngine', '2');
-    form.append('isTable', 'true');
-    form.append('file', new Blob([buf], { type: 'image/jpeg' }), 'receipt.jpg');
-
-    const res = await fetch('https://api.ocr.space/parse/image', { method: 'POST', body: form });
-    const data = await res.json().catch(() => null);
-    if (!data || data.IsErroredOnProcessing) {
-      const msg = data ? [].concat(data.ErrorMessage || 'OCR failed').join('; ') : 'OCR provider error';
-      return json({ error: msg }, 502, env);
+    // Try OCR.space Engine 2 (best accuracy) first, then fall back to Engine 1 (faster and more
+    // reliable on the free tier) if Engine 2 errors or times out. Each attempt is time-boxed so a
+    // stalled engine fails fast to the fallback instead of hanging the request.
+    async function ocrSpace(engine) {
+      const form = new FormData();
+      form.append('apikey', env.OCR_API_KEY);
+      form.append('language', 'eng');
+      form.append('scale', 'true');
+      form.append('OCREngine', String(engine));
+      form.append('isTable', 'true');
+      form.append('file', new Blob([buf], { type: 'image/jpeg' }), 'receipt.jpg');
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      try {
+        const res = await fetch('https://api.ocr.space/parse/image', { method: 'POST', body: form, signal: ctrl.signal });
+        const data = await res.json().catch(() => null);
+        if (!data || data.IsErroredOnProcessing) {
+          return { ok: false, error: data ? [].concat(data.ErrorMessage || 'OCR failed').join('; ') : 'OCR provider error' };
+        }
+        return { ok: true, text: (data.ParsedResults || []).map(r => r.ParsedText || '').join('\n').trim(), exitCode: data.OCRExitCode };
+      } catch (e) {
+        return { ok: false, error: e && e.name === 'AbortError' ? 'OCR engine timed out' : String(e && e.message || e) };
+      } finally {
+        clearTimeout(timer);
+      }
     }
-    const text = (data.ParsedResults || []).map(r => r.ParsedText || '').join('\n').trim();
-    return json({ text, exitCode: data.OCRExitCode }, 200, env);
+
+    let result = await ocrSpace(2);
+    if (!result.ok) result = await ocrSpace(1); // fall back to the faster, steadier engine
+    if (!result.ok) return json({ error: result.error }, 502, env);
+    return json({ text: result.text, exitCode: result.exitCode }, 200, env);
   }
 
   // ---- /ai-extract ----
