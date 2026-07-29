@@ -156,8 +156,26 @@ async function handle(request, env) {
       }
     }
 
-    let result = await ocrSpace(2);
-    if (!result.ok) result = await ocrSpace(1); // fall back to the faster, steadier engine
+    // Last-resort OCR via Cloudflare Workers AI vision (free, on-account) when OCR.space is fully
+    // down. Best-effort and fully wrapped, so it can only ever ADD a result — never break the flow.
+    async function ocrWorkersAI() {
+      if (!env.AI) return { ok: false, error: 'AI OCR unavailable (no AI binding)' };
+      try {
+        const out = await env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', {
+          image: [...new Uint8Array(buf)],
+          prompt: 'Transcribe every line of text in this receipt exactly as printed — shop name, date, item lines and totals. Output only the raw text, no commentary.',
+          max_tokens: 1024,
+        });
+        const text = ((out && out.description) || '').trim();
+        return text ? { ok: true, text, exitCode: 'AI' } : { ok: false, error: 'AI OCR returned no text' };
+      } catch (e) {
+        return { ok: false, error: 'AI OCR failed: ' + String((e && e.message) || e) };
+      }
+    }
+
+    let result = await ocrSpace(2);            // best accuracy
+    if (!result.ok) result = await ocrSpace(1); // faster, steadier engine
+    if (!result.ok) result = await ocrWorkersAI(); // free on-account net if OCR.space is down
     if (!result.ok) return json({ error: result.error }, 502, env);
     return json({ text: result.text, exitCode: result.exitCode }, 200, env);
   }
