@@ -103,6 +103,14 @@ function filteredMedical() {
 
 export function onMedicalFilterChange() { renderMedical(); }
 
+// ---------- row selection (for selective export) ----------
+function pickedMedicalIds() {
+  return [...document.querySelectorAll('#medLedgerBody input[data-med-pick]:checked')].map(cb => cb.value);
+}
+export function toggleAllMedical(master) {
+  document.querySelectorAll('#medLedgerBody input[data-med-pick]').forEach(cb => { cb.checked = master.checked; });
+}
+
 // ---------- umbrella render ----------
 export function renderMedical() {
   populateMedicalFilters();
@@ -150,6 +158,7 @@ function renderMedicalLedger(list) {
     const view = (r.imagePaths || []).length
       ? `<button onclick="viewMedicalPhotos('${r.id}')" class="text-indigo-400 hover:text-indigo-300 p-1" title="View photos"><i class="fa-solid fa-images"></i></button>` : '';
     return `<tr class="hover:bg-gray-900/40 transition align-top">
+      <td class="py-2.5 px-3 text-center"><input type="checkbox" data-med-pick value="${esc(r.id)}" class="accent-indigo-500"></td>
       <td class="py-2.5 px-4">
         <div class="text-xs font-semibold text-slate-200 flex items-center gap-1.5 flex-wrap">${esc(r.merchant || '(no merchant)')} ${statusBadges(r)}</div>
         <div class="text-[9px] text-slate-500 font-mono">${esc(r.date || '—')}</div>
@@ -203,11 +212,11 @@ function renderMedicalCharts(list) {
 export function viewMedicalPhotos(id) {
   const r = (database.medicalRecords || []).find(x => x.id === id);
   if (!r || !(r.imagePaths || []).length) { showToast('No photos on this record.', 'error'); return; }
-  // Each imagePath is "receipt/<id>"; reuse the receipt image viewer.
-  r.imagePaths.forEach(p => {
-    const rid = String(p).split('/').pop();
-    if (rid && typeof window.viewReceipt === 'function') window.viewReceipt(rid);
-  });
+  // Open the FIRST image only — opening several windows in a loop is blocked by popup blockers
+  // (that's why "only the first was retrievable"). Use Edit to review each photo via its own icon.
+  const rid = String(r.imagePaths[0]).split('/').pop();
+  if (rid && typeof window.viewReceipt === 'function') window.viewReceipt(rid);
+  if ((r.imagePaths || []).length > 1) showToast('Showing photo 1. Open Edit to view each photo individually.', 'info');
 }
 
 // ---------- modal (add / edit, incl. dynamic medicine rows) ----------
@@ -224,6 +233,14 @@ export function openMedicalModal(id) {
   document.getElementById('medRecConsultation').value = r ? num(r.consultation) : 0;
   document.getElementById('medRecRemark').value = (r && r.remark) || '';
   document.getElementById('medRecRawOcr').value = (r && r.rawOcr) || '';
+  // One clickable icon per attached photo — each opens that single image (no popup-blocked loop).
+  const photos = (r && r.imagePaths) || [];
+  const pbox = document.getElementById('medRecPhotos');
+  if (pbox) {
+    pbox.innerHTML = photos.length
+      ? photos.map((p, i) => `<button type="button" onclick="viewReceipt('${esc(String(p).split('/').pop())}')" class="flex items-center gap-1.5 text-[11px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 hover:border-indigo-400 rounded-lg px-2.5 py-1.5 transition"><i class="fa-solid fa-image"></i> Photo ${i + 1}</button>`).join('')
+      : '<span class="text-[10px] text-slate-500 italic">No photos attached.</span>';
+  }
   const rows = document.getElementById('medMedicineRows');
   rows.innerHTML = '';
   const meds = (r && r.medicines) || [];
@@ -330,12 +347,21 @@ const CLAUDE_INSTRUCTIONS =
   'Return ONLY one JSON object, no prose, of the form: ' +
   '{ "type": "medical-enriched-import", "schemaVersion": 1, "records": [ <one enriched record per input record> ] }.';
 
-export function exportMedicalRaw(allRecords) {
-  const src = (database.medicalRecords || []).filter(r => allRecords || !r.enriched);
-  if (!src.length) {
-    showToast(allRecords ? 'No medical records to export yet.' : 'Nothing new to enrich — every record is already enriched. Use “Export all”.', 'error');
-    return;
+// scope: 'selected' (ticked rows), 'new' (un-enriched), or 'all'.
+export function exportMedicalRaw(scope) {
+  const records = database.medicalRecords || [];
+  let src;
+  if (scope === 'selected') {
+    const ids = new Set(pickedMedicalIds());
+    if (!ids.size) { showToast('Tick the records you want to export first (checkboxes on the left).', 'error'); return; }
+    src = records.filter(r => ids.has(r.id));
+  } else if (scope === 'all') {
+    src = records;
+  } else { // 'new' — everything not yet enriched
+    src = records.filter(r => !r.enriched);
+    if (!src.length) { showToast('Nothing new to enrich — every record is already enriched. Use “Selected” or “All”.', 'error'); return; }
   }
+  if (!src.length) { showToast('No medical records to export yet.', 'error'); return; }
   downloadJson({
     type: EXPORT_TYPE,
     schemaVersion: IO_SCHEMA_VERSION,

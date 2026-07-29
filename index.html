@@ -1047,8 +1047,9 @@
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button onclick="openMedicalModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-plus mr-1"></i>Add Record</button>
-                    <button onclick="exportMedicalRaw(false)" title="Export un-enriched records to send to Claude" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-200 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-file-export mr-1"></i>Export raw</button>
-                    <button onclick="exportMedicalRaw(true)" title="Export all records" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-400 font-bold py-2 px-2.5 rounded-xl text-[11px] uppercase tracking-wider transition">All</button>
+                    <button onclick="exportMedicalRaw('selected')" title="Export the ticked records to send to Claude" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-200 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-file-export mr-1"></i>Export selected</button>
+                    <button onclick="exportMedicalRaw('new')" title="Export all not-yet-enriched records" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-400 font-bold py-2 px-2.5 rounded-xl text-[11px] uppercase tracking-wider transition">New</button>
+                    <button onclick="exportMedicalRaw('all')" title="Export all records" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-400 font-bold py-2 px-2.5 rounded-xl text-[11px] uppercase tracking-wider transition">All</button>
                     <label for="medImportFile" class="cursor-pointer bg-gray-900 border border-gray-800 hover:border-emerald-500 text-slate-200 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition inline-flex items-center"><i class="fa-solid fa-file-import mr-1"></i>Import JSON</label>
                     <input type="file" id="medImportFile" accept="application/json,.json" onchange="handleMedicalImportFile(this)" class="hidden">
                 </div>
@@ -1064,6 +1065,7 @@
                         <table class="w-full text-left">
                             <thead class="text-[9px] uppercase tracking-wider text-slate-500 border-b border-gray-800">
                                 <tr>
+                                    <th class="py-2 px-3 text-center"><input type="checkbox" onchange="toggleAllMedical(this)" title="Select all" class="accent-indigo-500"></th>
                                     <th class="py-2 px-4">Record</th>
                                     <th class="py-2 px-4 text-right">Insurance</th>
                                     <th class="py-2 px-4 text-right">Patient</th>
@@ -1318,6 +1320,7 @@
             </div>
             <form id="medicalForm" onsubmit="handleMedicalSubmit(event)" class="space-y-3">
                 <input type="hidden" id="medRecId">
+                <div id="medRecPhotos" class="flex flex-wrap gap-2"></div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Date</label>
                         <input type="date" id="medRecDate" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
@@ -1370,7 +1373,7 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.07.06-9';
+      window.APP_VERSION = '2026.07.30-1';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','dashboard','dropdowns',
