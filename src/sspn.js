@@ -22,7 +22,7 @@ import { askConfirm, initDatePickers, showToast } from './ui.js';
             const reflected = document.getElementById("sspnReflected").checked;
 
             const rec = {
-                id: 'sspn-' + Date.now(),
+                id: 'sspn-' + Date.now() + Math.random().toString(36).slice(2, 6),
                 date: document.getElementById("sspnDate").value,
                 channel: document.getElementById("sspnChannel").value,
                 device: document.getElementById("sspnDevice").value,

@@ -8,6 +8,13 @@ export let database = {
             receipts: [],
             claims: [],
             medicalRecords: [],
+            // Saving-account interest ledger. Only user-actualised months are stored
+            // here (status:'actual', locked). Forecast months are computed on the fly
+            // from settings.savingsConfig so they can never drift out of sync.
+            savingsMonths: [],
+            // Soft-delete log (tombstones) so deletions propagate across devices
+            // instead of being resurrected by the other device's copy on merge.
+            deletions: [],
             cards: [
                 { 
                     id: "Maybank2Gold", 
@@ -107,7 +114,26 @@ export let database = {
                 claimTypes: ["Medical", "Insurance", "Tax Relief"],
                 claimStatuses: ["Not Submitted", "Submitted", "Approved", "Reimbursed", "Rejected"],
                 // Non-card payment methods for receipts (cards are added automatically). Editable in Settings.
-                paymentMethods: ["Touch 'n Go eWallet", "GrabPay", "Boost", "ShopeePay", "DuitNow QR", "Cash", "Bank Transfer"]
+                paymentMethods: ["Touch 'n Go eWallet", "GrabPay", "Boost", "ShopeePay", "DuitNow QR", "Cash", "Bank Transfer"],
+                // Saving-account interest forecast configuration. Drives the "Interest
+                // (Saving Acc)" tab. Forecast rows are generated from this; actualised
+                // months live in database.savingsMonths and override the forecast.
+                savingsConfig: {
+                    startMonth: "",            // "YYYY-MM"; blank => current month at render time
+                    startingBalance: 0,        // opening balance of the first month
+                    monthlyDeposit: 0,         // fixed contribution added every month (overridable per month)
+                    horizonMonths: 12,         // rolling forecast length
+                    baseRatePA: 0.0005,        // 0.05% PA flat => monthly "Interest Credit"
+                    aboveTopTierRatePA: 0,     // PA rate for balance beyond the top tier band
+                    // Tiered "One Bonus" schedule. `band` = size of each PA rate band (RM).
+                    tiers: [
+                        { band: 25000,  ratePA: 0.015 },
+                        { band: 25000,  ratePA: 0.0165 },
+                        { band: 50000,  ratePA: 0.0565 },
+                        { band: 100000, ratePA: 0.0365 },
+                        { band: 200000, ratePA: 0.0165 }
+                    ]
+                }
             }
         };
 

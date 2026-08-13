@@ -1,18 +1,17 @@
 // Automatic cloud sync engine.
 //
-// Replaces the need to click Sync/Load: pulls on open, pushes (debounced) after
-// every local change, and polls periodically so other devices' edits appear on
-// their own. The manual header buttons remain as a force push/pull fallback.
-import { database } from './state.js';
-import { ensureMeta } from './storage.js';
+// Replaces the need to click Sync/Load: every trigger runs the same convergent
+// syncNow() (pull → merge → adopt/push). It pulls+merges on open, pushes
+// (debounced) after every local change, and polls periodically so edits made on
+// other devices are merged in on their own. The manual header buttons remain as a
+// force-sync fallback that calls the exact same core.
 import { gatewayConfig } from './config.js';
-import { pushToCloud, fetchCloud, applyPull, localIsDirty } from './sync.js';
+import { syncNow } from './sync.js';
 
 const PUSH_DEBOUNCE_MS = 3000;
 const POLL_INTERVAL_MS = 60000;
 
 let pushTimer = null;
-let isApplyingRemote = false; // guards against a pulled-in DB triggering a spurious push
 let pollHandle = null;
 
 function gatewayReady() {
@@ -35,50 +34,29 @@ export function setSyncStatus(state) {
   el.innerHTML = `<i class="fa-solid ${s.icon}"></i><span>${s.txt}</span>`;
 }
 
-// Debounced auto-push, triggered by the cc:dbchanged event.
+// Debounced convergent sync, triggered by the cc:dbchanged event after a local edit.
 export function scheduleAutoPush() {
-  if (isApplyingRemote || !gatewayReady()) return;
+  if (!gatewayReady()) return;
   setSyncStatus('syncing');
   if (pushTimer) clearTimeout(pushTimer);
   pushTimer = setTimeout(() => {
     pushTimer = null;
-    pushToCloud({ silent: true });
+    syncNow({ silent: true });
   }, PUSH_DEBOUNCE_MS);
 }
 
-// Pull and adopt the cloud copy only when it is strictly newer and we have no
-// unsynced local edits (last-writer-wins, with the local push winning otherwise).
-export async function autoPullIfRemoteNewer() {
-  if (!gatewayReady() || isApplyingRemote) return;
-  ensureMeta();
-  try {
-    const remote = await fetchCloud();
-    if (!remote || remote.empty || !remote.meta) return;
-    if (remote.meta.deviceId === database.meta.deviceId && !localIsDirty()) {
-      // Same device, nothing newer to learn.
-    }
-    const remoteNewer = remote.meta.updatedAt
-      && (!database.meta.lastSyncedAt || remote.meta.updatedAt > database.meta.lastSyncedAt);
-    if (remoteNewer && !localIsDirty()) {
-      isApplyingRemote = true;
-      try { applyPull(remote, { silent: true }); }
-      finally { isApplyingRemote = false; }
-    } else if (localIsDirty()) {
-      scheduleAutoPush(); // our edits are ahead — push them instead
-    } else {
-      setSyncStatus('synced');
-    }
-  } catch (err) {
-    console.error('Auto-pull failed', err);
-    setSyncStatus('offline');
-  }
+// Periodic convergent sync so another device's edits are merged in even while idle.
+// Merge means this is always safe: local edits are never discarded, only reconciled.
+export async function autoSyncTick() {
+  if (!gatewayReady()) return;
+  await syncNow({ silent: true });
 }
 
 export function initAutoSync() {
   window.addEventListener('cc:dbchanged', scheduleAutoPush);
   if (!gatewayReady()) { setSyncStatus('idle'); return; }
   setSyncStatus('synced');
-  autoPullIfRemoteNewer();
+  autoSyncTick();
   if (pollHandle) clearInterval(pollHandle);
-  pollHandle = setInterval(autoPullIfRemoteNewer, POLL_INTERVAL_MS);
+  pollHandle = setInterval(autoSyncTick, POLL_INTERVAL_MS);
 }

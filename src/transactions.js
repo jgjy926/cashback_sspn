@@ -99,7 +99,7 @@ import { askConfirm, initDatePickers, showToast } from './ui.js';
             const amount = parseFloat(document.getElementById("txAmount").value);
 
             const record = {
-                id: 'tx-' + Date.now(),
+                id: 'tx-' + Date.now() + Math.random().toString(36).slice(2, 6),
                 date: document.getElementById("txDate").value,
                 cardId: cardId,
                 category: catKey,

@@ -50,6 +50,9 @@
                     <button onclick="switchTab('sspn')" id="tabBtn-sspn" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
                         <i class="fa-solid fa-graduation-cap mr-1.5"></i>SSPN Wallet
                     </button>
+                    <button onclick="switchTab('savings')" id="tabBtn-savings" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
+                        <i class="fa-solid fa-piggy-bank mr-1.5"></i>Interest (Saving Acc)
+                    </button>
                     <button onclick="switchTab('cardManager')" id="tabBtn-cardManager" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
                         <i class="fa-solid fa-gears mr-1.5"></i>System Setup
                     </button>
@@ -533,6 +536,99 @@
                     </div>
                 </div>
             </div>
+        </section>
+
+        <!-- Interest (Saving Acc) Panel -->
+        <section id="tabContent-savings" class="hidden space-y-6">
+            <div>
+                <h2 class="text-lg font-bold text-slate-100 tracking-tight flex items-center gap-2">
+                    <i class="fa-solid fa-piggy-bank text-emerald-400"></i>Interest Forecast — Saving Account
+                </h2>
+                <p class="text-[11px] text-slate-500 mt-0.5">Project monthly interest from your tiered rate schedule, then lock in the real figure once it's credited. Closing balance auto-carries to next month's opening.</p>
+            </div>
+
+            <!-- KPI row -->
+            <div id="svKpiRow" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+            <!-- Setup / assumptions (collapsible) -->
+            <div class="glass-card rounded-2xl overflow-hidden">
+                <button type="button" onclick="toggleSavingsSetup()" class="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-900/40 transition">
+                    <span class="text-xs font-bold text-slate-300 uppercase tracking-widest"><i class="fa-solid fa-sliders text-indigo-400 mr-1.5"></i>Forecast Setup &amp; Rate Schedule</span>
+                    <i id="svSetupChevron" class="fa-solid fa-chevron-down transition text-slate-500"></i>
+                </button>
+                <div id="svSetupBody" class="hidden px-6 pb-6 border-t border-gray-800">
+                    <form id="svConfigForm" onsubmit="saveSavingsConfig(event)" class="space-y-5 pt-5">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svStartMonth">Tracking Start (genesis)</label>
+                                <input type="month" id="svStartMonth" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 [color-scheme:dark]">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svStartingBalance">Starting Balance (RM)</label>
+                                <input type="number" step="0.01" id="svStartingBalance" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svMonthlyDeposit">Monthly Deposit — fixed (RM)</label>
+                                <input type="number" step="0.01" id="svMonthlyDeposit" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svBaseRate">Interest Credit — base rate (% PA)</label>
+                                <input type="number" step="0.001" id="svBaseRate" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svHorizon">Window Size (months shown)</label>
+                                <input type="number" step="1" min="1" max="120" id="svHorizon" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svAboveRate">Above Top Tier (% PA)</label>
+                                <input type="number" step="0.001" id="svAboveRate" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">One Bonus — Tiered Rate Schedule <span class="text-slate-600 normal-case font-normal">(each band size &amp; its PA rate)</span></p>
+                            <div id="svTierInputs" class="space-y-2"></div>
+                        </div>
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-5 rounded-xl text-xs uppercase tracking-widest transition">
+                            <i class="fa-solid fa-floppy-disk mr-1.5"></i>Save Settings
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Schedule table -->
+            <div class="glass-card rounded-2xl p-6">
+                <div class="border-b border-gray-800 pb-3 mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+                    <div>
+                        <h4 class="text-sm font-bold uppercase tracking-wider text-slate-200">Monthly Interest Schedule</h4>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Click a <span class="text-slate-300 font-semibold">month</span> to expand its tier breakdown. Click a <span class="text-slate-400 font-semibold">Forecast</span> badge to enter the interest actually received or set a deposit/withdrawal — the row then locks as <span class="text-emerald-400 font-semibold">Actual</span>.</p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <label for="svViewStart" class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-1.5"><i class="fa-solid fa-filter text-indigo-400"></i>Window</label>
+                        <select id="svViewStart" onchange="onSavingsViewChange()" class="bg-gray-950 border border-gray-800 rounded-lg px-3 py-1.5 text-[11px] text-slate-100 focus:outline-none focus:border-indigo-500 font-mono"></select>
+                        <button type="button" id="svViewTodayBtn" onclick="savingsViewToday()" class="hidden px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 hover:bg-indigo-500/20 transition whitespace-nowrap" title="Jump the window back to the current month">This month</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs text-slate-300 border-collapse min-w-[860px]">
+                        <thead class="bg-gray-900/60 uppercase text-[9px] tracking-widest text-slate-500 font-bold border-b border-gray-800">
+                            <tr>
+                                <th class="py-3 px-3">Month</th>
+                                <th class="py-3 px-3 text-right">Balance (Open)</th>
+                                <th class="py-3 px-3 text-right">Deposit (+)</th>
+                                <th class="py-3 px-3 text-right">Interest Credit</th>
+                                <th class="py-3 px-3 text-right">One Bonus</th>
+                                <th class="py-3 px-3 text-right">Total Bonus</th>
+                                <th class="py-3 px-3 text-right">Withdraw + Exp</th>
+                                <th class="py-3 px-3 text-right">Balance (Close)</th>
+                                <th class="py-3 px-3 text-right">Eff. Rate</th>
+                                <th class="py-3 px-3 text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="svScheduleBody" class="divide-y divide-gray-800"></tbody>
+                    </table>
+                </div>
+            </div>
+
         </section>
 
         <!-- Maintenance Hub Panel -->
@@ -1180,6 +1276,76 @@
         </div>
     </div>
 
+    <!-- Savings Month Editor (forecast <-> actual) -->
+    <div id="savingsMonthModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="glass-card w-full max-w-lg rounded-2xl p-6 space-y-4 m-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <h3 class="text-sm font-bold text-emerald-400 uppercase tracking-widest"><i class="fa-solid fa-piggy-bank mr-1.5"></i>Month — <span id="svmMonthLabel"></span></h3>
+                <button onclick="closeSavingsMonthModal()" class="text-slate-400 hover:text-slate-100"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="savingsMonthForm" onsubmit="handleSavingsMonthSubmit(event)" class="space-y-4">
+                <input type="hidden" id="svmMonth">
+
+                <label class="flex items-center gap-2.5 bg-gray-950 border border-gray-800/80 rounded-xl p-3 cursor-pointer">
+                    <input type="checkbox" id="svmIsActual" onchange="applySavingsActualMode()" class="w-4 h-4 rounded border-gray-800 text-emerald-500 bg-gray-950 focus:ring-emerald-500 cursor-pointer">
+                    <span class="text-xs font-semibold text-slate-200 flex items-center gap-1.5"><i class="fa-solid fa-lock text-emerald-400"></i>Mark as Actual — lock the interest that was really credited</span>
+                </label>
+                <p id="svmModeHint" class="text-[10px] text-slate-500 leading-relaxed -mt-1"></p>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svmOpening">Balance (Open) RM</label>
+                        <input type="number" step="0.01" id="svmOpening" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svmInterest">Interest Credit RM</label>
+                        <input type="number" step="0.01" id="svmInterest" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svmOneBonus">One Bonus RM</label>
+                        <input type="number" step="0.01" id="svmOneBonus" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 font-mono">
+                    </div>
+                </div>
+
+                <!-- Deposits: fixed monthly + any number of ad-hoc entries -->
+                <div class="bg-gray-950/60 border border-gray-800/80 rounded-xl p-3 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-sky-400"><i class="fa-solid fa-arrow-down-to-bracket mr-1"></i>Deposits (+)</span>
+                        <span class="text-[11px] font-mono font-bold text-sky-300">RM <span id="svmDepositTotal">0.00</span></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="relative w-28 shrink-0">
+                            <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600 text-[10px] font-semibold">RM</span>
+                            <input type="number" step="0.01" id="svmFixedDeposit" oninput="recomputeModalTotals()" class="w-full bg-gray-950 border border-gray-800 rounded-lg pl-8 pr-2 py-1.5 text-[11px] text-slate-100 focus:outline-none focus:border-sky-500 font-mono">
+                        </div>
+                        <span class="text-[10px] text-slate-500 flex-1">Fixed monthly deposit</span>
+                    </div>
+                    <div id="svmDepositList" class="space-y-2"></div>
+                    <button type="button" onclick="addDepositRow()" class="text-[10px] font-bold text-sky-400 hover:text-sky-300"><i class="fa-solid fa-plus mr-1"></i>Add ad-hoc deposit</button>
+                </div>
+
+                <!-- Withdrawals / expenses: any number of entries -->
+                <div class="bg-gray-950/60 border border-gray-800/80 rounded-xl p-3 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-rose-400"><i class="fa-solid fa-arrow-up-from-bracket mr-1"></i>Withdrawals / Expenses (−)</span>
+                        <span class="text-[11px] font-mono font-bold text-rose-300">RM <span id="svmWithdrawTotal">0.00</span></span>
+                    </div>
+                    <div id="svmWithdrawList" class="space-y-2"></div>
+                    <button type="button" onclick="addWithdrawRow()" class="text-[10px] font-bold text-rose-400 hover:text-rose-300"><i class="fa-solid fa-plus mr-1"></i>Add withdrawal / expense</button>
+                </div>
+
+                <div class="flex gap-2.5">
+                    <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition">
+                        Save
+                    </button>
+                    <button type="button" id="svmRevertBtn" onclick="revertSavingsMonth()" class="hidden px-4 py-2.5 rounded-xl text-xs font-bold text-slate-400 hover:text-rose-300 bg-gray-900 border border-gray-800 transition" title="Clear saved values and return to pure forecast">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Custom Confirm Modal -->
     <div id="customConfirmModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
         <div class="glass-card w-full max-w-sm rounded-2xl p-6 space-y-4 m-4">
@@ -1373,10 +1539,10 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.07.30-1';
+      window.APP_VERSION = '2026.08.03-1';
       (function () {
         var v = window.APP_VERSION;
-        var mods = ['state','storage','config','sync','dashboard','dropdowns',
+        var mods = ['state','storage','config','sync','merge','dashboard','dropdowns',
           'ui','charts','calc','cards','optimizer','sspn','transactions',
           'claims','medical','autosync','receipts','ocr','excel','main'];
         var imports = {};

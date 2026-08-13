@@ -57,17 +57,34 @@ async function handle(request, env) {
       const res = await fetch(ledgerUrl, { headers: { Authorization: koofrAuth } });
       if (res.status === 404) return json({ empty: true }, 200, env);
       if (!res.ok) return json({ error: `WebDAV read failed (${res.status})` }, res.status, env);
-      return new Response(await res.text(), { headers: cors(env, 'application/json') });
+      // Surface the storage ETag so the client can do a conditional (If-Match) PUT.
+      const etag = res.headers.get('ETag') || res.headers.get('etag') || '';
+      return new Response(await res.text(), { headers: cors(env, 'application/json', etag) });
     }
     if (request.method === 'PUT') {
       const payload = await request.text();
       await mkcol(base, koofrAuth); // ensure the base folder exists (e.g. /Koofr/cashback_sspn)
-      const res = await fetch(ledgerUrl, {
-        method: 'PUT',
-        headers: { Authorization: koofrAuth, 'Content-Type': 'application/json' },
-        body: payload,
-      });
+
+      // Optimistic concurrency: if the client sends the ETag it based its merge on,
+      // forward it as If-Match so the storage rejects a write built on a stale copy.
+      const ifMatch = request.headers.get('If-Match') || '';
+      const putHeaders = { Authorization: koofrAuth, 'Content-Type': 'application/json' };
+      if (ifMatch) putHeaders['If-Match'] = ifMatch;
+
+      const res = await fetch(ledgerUrl, { method: 'PUT', headers: putHeaders, body: payload });
+
+      // 412 Precondition Failed = another device wrote since the client's GET.
+      // Return 409 + the current ledger so the client re-merges and retries. (If the
+      // storage backend ignores If-Match this branch never fires and writes proceed
+      // unconditionally — the client-side merge still guarantees convergence.)
+      if (res.status === 412) {
+        const cur = await fetch(ledgerUrl, { headers: { Authorization: koofrAuth } });
+        const curEtag = cur.headers.get('ETag') || cur.headers.get('etag') || '';
+        const body = cur.ok ? await cur.text() : JSON.stringify({ conflict: true });
+        return new Response(body, { status: 409, headers: cors(env, 'application/json', curEtag) });
+      }
       if (!res.ok) return json({ error: `WebDAV write failed (${res.status})` }, res.status, env);
+
       // one dated backup per day (idempotent within a day -> bounded Koofr growth)
       const day = new Date().toISOString().slice(0, 10);
       const bakDir = `${base}/backups`;
@@ -77,7 +94,9 @@ async function handle(request, env) {
         headers: { Authorization: koofrAuth, 'Content-Type': 'application/json' },
         body: payload,
       }).catch(() => {});
-      return json({ status: 'success', backup: `${day}` }, 200, env);
+      const newEtag = res.headers.get('ETag') || res.headers.get('etag') || '';
+      return new Response(JSON.stringify({ status: 'success', backup: `${day}` }),
+        { status: 200, headers: cors(env, 'application/json', newEtag) });
     }
     return json({ error: 'Method not allowed' }, 405, env);
   }
@@ -274,14 +293,16 @@ function allowedOrigin(env) {
   try { return new URL(raw).origin; } catch { return raw.replace(/\/.*$/, ''); }
 }
 
-function cors(env, contentType) {
+function cors(env, contentType, etag) {
   const h = {
     'Access-Control-Allow-Origin': allowedOrigin(env),
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, If-Match',
     'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, OPTIONS',
     'Vary': 'Origin',
   };
   if (contentType) h['Content-Type'] = contentType;
+  // Expose the ETag so browser JS (cross-origin) can read it for conditional PUTs.
+  if (etag) { h['ETag'] = etag; h['Access-Control-Expose-Headers'] = 'ETag'; }
   return h;
 }
 

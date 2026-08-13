@@ -305,7 +305,7 @@ export async function saveReceipt(e) {
 
   let txId = null;
   if (alsoLog && total > 0 && cardId) {
-    txId = 'tx-' + Date.now();
+    txId = 'tx-' + Date.now() + Math.random().toString(36).slice(2, 6);
     database.transactions.push({ id: txId, date, cardId, category, internalTag, description: merchant || 'Receipt', amount: total, remark, receiptId: id });
   }
 

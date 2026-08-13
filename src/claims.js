@@ -100,7 +100,7 @@ export function refreshClaimReceiptPicker() {
 
 export function handleClaimSubmit(e) {
   e.preventDefault();
-  const id = 'claim-' + Date.now();
+  const id = 'claim-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const receiptIds = pickedReceiptIds('claimReceiptList');
   const claim = {
     id,
