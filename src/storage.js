@@ -45,6 +45,8 @@ export function migrate(db) {
     if (typeof sc.horizonMonths !== 'number' || sc.horizonMonths < 1) sc.horizonMonths = 12;
     if (typeof sc.baseRatePA !== 'number') sc.baseRatePA = 0.0005;
     if (typeof sc.aboveTopTierRatePA !== 'number') sc.aboveTopTierRatePA = 0;
+    if (sc.interestBasis !== 'daily' && sc.interestBasis !== 'monthEnd') sc.interestBasis = 'monthEnd';
+    if (typeof sc.depositDay !== 'number' || sc.depositDay < 1 || sc.depositDay > 31) sc.depositDay = 1;
     if (!Array.isArray(sc.tiers) || sc.tiers.length === 0) {
       sc.tiers = [
         { band: 25000, ratePA: 0.015 },

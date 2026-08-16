@@ -583,6 +583,17 @@
                                 <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svAboveRate">Above Top Tier (% PA)</label>
                                 <input type="number" step="0.001" id="svAboveRate" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
                             </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svInterestBasis">Interest Credit Basis</label>
+                                <select id="svInterestBasis" onchange="document.getElementById('svDepositDayWrap').classList.toggle('opacity-40', this.value!=='daily')" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                                    <option value="monthEnd">Month-end balance (opening + deposits − withdrawals)</option>
+                                    <option value="daily">Daily by-date (÷365, from date)</option>
+                                </select>
+                            </div>
+                            <div id="svDepositDayWrap">
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1" for="svDepositDay">Fixed Deposit Day <span class="text-slate-600 normal-case font-normal">(daily mode)</span></label>
+                                <input type="number" step="1" min="1" max="31" id="svDepositDay" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono">
+                            </div>
                         </div>
                         <div>
                             <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">One Bonus — Tiered Rate Schedule <span class="text-slate-600 normal-case font-normal">(each band size &amp; its PA rate)</span></p>
@@ -599,7 +610,7 @@
             <div class="glass-card rounded-2xl p-6">
                 <div class="border-b border-gray-800 pb-3 mb-4 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
                     <div>
-                        <h4 class="text-sm font-bold uppercase tracking-wider text-slate-200">Monthly Interest Schedule</h4>
+                        <h4 class="text-sm font-bold uppercase tracking-wider text-slate-200">Monthly Interest Schedule <span id="svBasisChip" class="ml-1 align-middle px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/25 text-[8px] font-bold tracking-wide normal-case"></span></h4>
                         <p class="text-[10px] text-slate-500 mt-0.5">Click a <span class="text-slate-300 font-semibold">month</span> to expand its tier breakdown. Click a <span class="text-slate-400 font-semibold">Forecast</span> badge to enter the interest actually received or set a deposit/withdrawal — the row then locks as <span class="text-emerald-400 font-semibold">Actual</span>.</p>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
@@ -1318,7 +1329,7 @@
                             <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600 text-[10px] font-semibold">RM</span>
                             <input type="number" step="0.01" id="svmFixedDeposit" oninput="recomputeModalTotals()" class="w-full bg-gray-950 border border-gray-800 rounded-lg pl-8 pr-2 py-1.5 text-[11px] text-slate-100 focus:outline-none focus:border-sky-500 font-mono">
                         </div>
-                        <span class="text-[10px] text-slate-500 flex-1">Fixed monthly deposit</span>
+                        <span id="svmFixedDepositHint" class="text-[10px] text-slate-500 flex-1">Fixed monthly deposit</span>
                     </div>
                     <div id="svmDepositList" class="space-y-2"></div>
                     <button type="button" onclick="addDepositRow()" class="text-[10px] font-bold text-sky-400 hover:text-sky-300"><i class="fa-solid fa-plus mr-1"></i>Add ad-hoc deposit</button>

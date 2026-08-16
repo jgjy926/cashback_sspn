@@ -125,6 +125,11 @@ export let database = {
                     horizonMonths: 12,         // rolling forecast length
                     baseRatePA: 0.0005,        // 0.05% PA flat => monthly "Interest Credit"
                     aboveTopTierRatePA: 0,     // PA rate for balance beyond the top tier band
+                    // Interest Credit basis. 'monthEnd' => baseRate/12 x (opening + deposits
+                    // - withdrawals). 'daily' => day-weight each flow by its day-of-month
+                    // (÷365, inclusive from the flow date). One Bonus always uses opening.
+                    interestBasis: "monthEnd",
+                    depositDay: 1,             // day-of-month the fixed monthly deposit lands (daily mode)
                     // Tiered "One Bonus" schedule. `band` = size of each PA rate band (RM).
                     tiers: [
                         { band: 25000,  ratePA: 0.015 },

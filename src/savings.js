@@ -21,6 +21,8 @@ import { askConfirm, showToast } from './ui.js';
 let expandedMonth = null;
 // Selected start month of the visible 12-month window (null => current calendar month).
 let viewStartMonth = null;
+// Whether the editor modal is showing day-of-month fields (set when it opens).
+let modalDailyMode = false;
 
 // ---- pure helpers --------------------------------------------------------
 
@@ -54,11 +56,6 @@ function currentMonthKey() { const n = new Date(); return `${n.getFullYear()}-${
 
 function getConfig() { return (database.settings && database.settings.savingsConfig) || {}; }
 
-// Monthly "Interest Credit" — flat base PA rate on the balance.
-function interestCreditMonthly(balance, baseRatePA) {
-  return round2(Math.max(0, Number(balance) || 0) * (Number(baseRatePA) || 0) / 12);
-}
-
 // Per-tier split of a balance. Always returns every configured band (amountInBand
 // 0 for bands the balance doesn't reach) plus an "above top tier" row when the
 // balance exceeds the schedule — this drives the collapsible breakdown panel.
@@ -86,6 +83,37 @@ function tierBreakdown(balance, tiers, aboveRatePA) {
 function oneBonusMonthly(balance, tiers, aboveRatePA) {
   const sum = tierBreakdown(balance, tiers, aboveRatePA).reduce((a, r) => a + r.monthlyInterest, 0);
   return round2(sum);
+}
+
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+function daysInMonth(key) { const { y, m } = parseMonth(key); return new Date(y, m, 0).getDate(); }
+
+// Monthly "Interest Credit". Two bases (config.interestBasis):
+//  - 'monthEnd': baseRate/12 x (opening + deposits - withdrawals). Dates ignored.
+//  - 'daily'   : day-weight each balance by its day-of-month, ÷365, inclusive from
+//                the flow date. Opening spans the whole month; the fixed deposit
+//                lands on config.depositDay; each ad-hoc entry on its own `date`
+//                (missing => 1st). A flow on day D earns for (daysInMonth-D+1) days.
+// One Bonus is unaffected — it always uses the opening balance.
+function interestCreditFor(openBal, fixedDeposit, adhocDeposits, withdrawals, monthKey, cfg) {
+  const rate = Number(cfg.baseRatePA) || 0;
+  const base = Math.max(0, Number(openBal) || 0);
+
+  if (cfg.interestBasis === 'daily') {
+    const N = daysInMonth(monthKey);
+    const depDay = clamp(Math.round(Number(cfg.depositDay) || 1), 1, N);
+    const daysFrom = d => N - clamp(Math.round(Number(d) || 1), 1, N) + 1; // inclusive
+    let weighted = base * N;
+    weighted += (Number(fixedDeposit) || 0) * daysFrom(depDay);
+    for (const e of (adhocDeposits || [])) weighted += (Number(e.amount) || 0) * daysFrom(e.date);
+    for (const e of (withdrawals || [])) weighted -= (Number(e.amount) || 0) * daysFrom(e.date);
+    return round2(Math.max(0, weighted) * rate / 365);
+  }
+
+  // month-end: whole net balance treated as present for the month
+  const dep = (Number(fixedDeposit) || 0) + (adhocDeposits || []).reduce((a, e) => a + (Number(e.amount) || 0), 0);
+  const wd = (withdrawals || []).reduce((a, e) => a + (Number(e.amount) || 0), 0);
+  return round2(Math.max(0, base + dep - wd) * rate / 12);
 }
 
 // Absolute month ordinal for "YYYY-MM" (for range math / comparisons).
@@ -129,11 +157,11 @@ function buildFullSchedule() {
     // Back-compat: older records stored single `deposit` / `withdrawExpense` numbers.
     const fixedDeposit = rec && typeof rec.fixedDeposit === 'number' ? round2(rec.fixedDeposit)
       : (rec && typeof rec.deposit === 'number' ? round2(rec.deposit) : defDeposit);
-    const adhocDeposits = (rec && Array.isArray(rec.deposits) ? rec.deposits : [])
-      .map(e => ({ amount: round2(e.amount || 0), remark: e.remark || '' }));
+    const mapEntry = e => { const o = { amount: round2(e.amount || 0), remark: e.remark || '' }; if (e.date != null) o.date = e.date; return o; };
+    const adhocDeposits = (rec && Array.isArray(rec.deposits) ? rec.deposits : []).map(mapEntry);
     const withdrawals = (rec && Array.isArray(rec.withdrawals) ? rec.withdrawals
       : (rec && typeof rec.withdrawExpense === 'number' && rec.withdrawExpense > 0 ? [{ amount: rec.withdrawExpense, remark: '' }] : []))
-      .map(e => ({ amount: round2(e.amount || 0), remark: e.remark || '' }));
+      .map(mapEntry);
     const deposit = round2(fixedDeposit + adhocDeposits.reduce((a, e) => a + e.amount, 0));
     const withdraw = round2(withdrawals.reduce((a, e) => a + e.amount, 0));
 
@@ -142,7 +170,7 @@ function buildFullSchedule() {
       interestCredit = round2(rec.interestCredit || 0);
       oneBonus = round2(rec.oneBonusCredit || 0);
     } else {
-      interestCredit = interestCreditMonthly(openBal, cfg.baseRatePA);
+      interestCredit = interestCreditFor(openBal, fixedDeposit, adhocDeposits, withdrawals, key, cfg);
       oneBonus = oneBonusMonthly(openBal, cfg.tiers, cfg.aboveTopTierRatePA);
     }
 
@@ -199,6 +227,11 @@ function renderSavings() {
   renderKpis(full);
   renderViewFilter(full);
   renderScheduleWindow(full);
+
+  const chip = document.getElementById('svBasisChip');
+  if (chip) chip.textContent = cfg.interestBasis === 'daily'
+    ? `Interest: daily by-date ÷365 (deposit day ${clamp(Math.round(cfg.depositDay || 1), 1, 31)})`
+    : 'Interest: month-end balance';
 }
 
 // Render just the schedule table for the active view window.
@@ -255,6 +288,11 @@ function syncSetupForm(cfg) {
   set('svHorizon', cfg.horizonMonths ?? 12);
   set('svBaseRate', round4((cfg.baseRatePA ?? 0) * 100));
   set('svAboveRate', round4((cfg.aboveTopTierRatePA ?? 0) * 100));
+  set('svInterestBasis', cfg.interestBasis === 'daily' ? 'daily' : 'monthEnd');
+  set('svDepositDay', cfg.depositDay ?? 1);
+  // The deposit-day input only matters in daily mode — dim it otherwise.
+  const depDayWrap = document.getElementById('svDepositDayWrap');
+  if (depDayWrap) depDayWrap.classList.toggle('opacity-40', cfg.interestBasis !== 'daily');
 
   const wrap = document.getElementById('svTierInputs');
   if (wrap && document.activeElement && wrap.contains(document.activeElement)) return; // don't clobber mid-edit
@@ -381,7 +419,7 @@ function renderScheduleTable(rows) {
       <tr class="bg-gray-950/50">
         <td colspan="10" class="px-4 pt-1 pb-4 border-b border-gray-800">
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div>${tierBreakdownHtml(r.openingBalance, r.status === 'actual')}</div>
+            <div>${tierBreakdownHtml(r)}</div>
             <div>${cashFlowHtml(r)}</div>
           </div>
         </td>
@@ -398,15 +436,19 @@ function toggleMonthBreakdown(month) {
   renderScheduleWindow();
 }
 
-// Build the tier-breakdown table HTML for a given (opening) balance. `isActual`
-// annotates that the row's One Bonus is user-entered, so the tiers shown are the
-// modelled schedule on that opening balance rather than the credited figure.
-function tierBreakdownHtml(balance, isActual) {
+// Build the tier-breakdown table HTML for a schedule row. Bands + One Bonus are
+// modelled on the row's opening balance; Interest Credit uses the configured basis
+// on the row's own cash flows. For an actual month these are the *modelled* figures
+// (the credited One Bonus is what the user keyed) — the note flags that.
+function tierBreakdownHtml(r) {
   const cfg = getConfig();
+  const balance = r.openingBalance;
+  const isActual = r.status === 'actual';
   const rows = tierBreakdown(balance, cfg.tiers, cfg.aboveTopTierRatePA);
-  const perBand = allocateCents(rows.map(r => r.monthlyInterest)); // sums exactly to total
+  const perBand = allocateCents(rows.map(b => b.monthlyInterest)); // sums exactly to total
   const totalOneBonus = oneBonusMonthly(balance, cfg.tiers, cfg.aboveTopTierRatePA);
-  const interestCredit = interestCreditMonthly(balance, cfg.baseRatePA);
+  const interestCredit = interestCreditFor(balance, r.fixedDeposit, r.deposits, r.withdrawals, r.month, cfg);
+  const basisLabel = cfg.interestBasis === 'daily' ? 'daily ÷365' : 'month-end';
 
   const bandRows = rows.map((r, i) => {
     const range = r.upper === Infinity ? `Above ${fmtRM(r.lower)}` : `${fmtRM(r.lower)} – ${fmtRM(r.upper)}`;
@@ -445,7 +487,7 @@ function tierBreakdownHtml(balance, isActual) {
             <td class="py-2 px-3 text-right text-[11px] font-mono font-bold text-emerald-400">${totalOneBonus.toFixed(2)}</td>
           </tr>
           <tr class="bg-gray-900/40">
-            <td class="py-2 px-3 text-[10px] font-bold text-slate-400" colspan="4">Interest Credit (base ${((cfg.baseRatePA || 0) * 100).toFixed(3)}% PA) / month</td>
+            <td class="py-2 px-3 text-[10px] font-bold text-slate-400" colspan="4">Interest Credit (base ${((cfg.baseRatePA || 0) * 100).toFixed(3)}% PA, ${basisLabel}) / month</td>
             <td class="py-2 px-3 text-right text-[11px] font-mono font-bold text-slate-200">${interestCredit.toFixed(2)}</td>
           </tr>
           <tr class="bg-gray-900/60">
@@ -461,10 +503,14 @@ function tierBreakdownHtml(balance, isActual) {
 // withdrawal/expense with its remark, and the two totals. Surfaces the remarks the
 // user captured in the editor.
 function cashFlowHtml(r) {
+  const cfg = getConfig();
+  const daily = cfg.interestBasis === 'daily';
+  const dayTag = d => daily ? ` <span class="text-slate-500">· day ${clamp(Math.round(Number(d) || 1), 1, daysInMonth(r.month))}</span>` : '';
+
   const depLines = [];
-  if ((r.fixedDeposit || 0) > 0) depLines.push({ label: 'Fixed monthly deposit', amount: r.fixedDeposit, muted: true });
-  (r.deposits || []).forEach(e => depLines.push({ label: e.remark || 'Ad-hoc deposit', amount: e.amount }));
-  const wdLines = (r.withdrawals || []).map(e => ({ label: e.remark || 'Withdrawal / expense', amount: e.amount }));
+  if ((r.fixedDeposit || 0) > 0) depLines.push({ label: 'Fixed monthly deposit', amount: r.fixedDeposit, muted: true, day: cfg.depositDay });
+  (r.deposits || []).forEach(e => depLines.push({ label: e.remark || 'Ad-hoc deposit', amount: e.amount, day: e.date }));
+  const wdLines = (r.withdrawals || []).map(e => ({ label: e.remark || 'Withdrawal / expense', amount: e.amount, day: e.date }));
 
   if (depLines.length === 0 && wdLines.length === 0) {
     return `<p class="text-[10px] text-slate-500 pt-1">No deposits or withdrawals recorded for ${r.label}.</p>`;
@@ -472,7 +518,7 @@ function cashFlowHtml(r) {
 
   const line = (l, color) => `
     <div class="flex items-center justify-between gap-3 py-1">
-      <span class="text-[10px] ${l.muted ? 'text-slate-500' : 'text-slate-300'} truncate">${escapeAttr(l.label)}</span>
+      <span class="text-[10px] ${l.muted ? 'text-slate-500' : 'text-slate-300'} truncate">${escapeAttr(l.label)}${dayTag(l.day)}</span>
       <span class="text-[10px] font-mono ${color} shrink-0">${fmtRM(l.amount)}</span>
     </div>`;
 
@@ -511,6 +557,8 @@ function saveSavingsConfig(e) {
   cfg.horizonMonths = Math.max(1, Math.min(120, Math.round(num('svHorizon', 12))));
   cfg.baseRatePA = num('svBaseRate') / 100;
   cfg.aboveTopTierRatePA = num('svAboveRate') / 100;
+  cfg.interestBasis = document.getElementById('svInterestBasis').value === 'daily' ? 'daily' : 'monthEnd';
+  cfg.depositDay = Math.max(1, Math.min(31, Math.round(num('svDepositDay', 1))));
 
   cfg.tiers = (cfg.tiers || []).map((t, i) => ({
     band: round2(num(`svTierBand${i}`, t.band)),
@@ -539,27 +587,34 @@ function escapeAttr(s) {
     .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// One editable amount+remark line for the deposit / withdrawal lists.
-function entryRowHtml(amount, remark, kind) {
+// One editable amount + day + remark line for the deposit / withdrawal lists. The
+// day-of-month field is kept in the DOM always (so values survive a basis switch)
+// but only shown in daily mode.
+function entryRowHtml(amount, remark, kind, date) {
   const border = kind === 'dep' ? 'focus:border-sky-500' : 'focus:border-rose-500';
   const amt = (amount === '' || amount == null) ? '' : Number(amount);
+  const dv = (date == null || date === '') ? '' : Number(date);
+  const dayHidden = modalDailyMode ? '' : 'hidden';
   return `
     <div class="sv-entry-row flex items-center gap-2">
-      <div class="relative w-28 shrink-0">
+      <div class="relative w-24 shrink-0">
         <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600 text-[10px] font-semibold">RM</span>
         <input type="number" step="0.01" value="${amt}" oninput="recomputeModalTotals()" class="sv-entry-amt w-full bg-gray-950 border border-gray-800 rounded-lg pl-8 pr-2 py-1.5 text-[11px] text-slate-100 focus:outline-none ${border} font-mono">
+      </div>
+      <div class="sv-date-cell ${dayHidden} w-14 shrink-0">
+        <input type="number" min="1" max="31" step="1" value="${dv}" placeholder="Day" title="Day of month" class="sv-entry-date w-full bg-gray-950 border border-gray-800 rounded-lg px-2 py-1.5 text-[11px] text-slate-200 focus:outline-none ${border} font-mono text-center">
       </div>
       <input type="text" value="${escapeAttr(remark)}" placeholder="Remark" class="sv-entry-remark flex-1 bg-gray-950 border border-gray-800 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-200 focus:outline-none ${border}">
       <button type="button" onclick="removeEntryRow(this)" title="Remove" class="text-slate-500 hover:text-rose-400 px-1.5"><i class="fa-solid fa-xmark"></i></button>
     </div>`;
 }
 
-function addDepositRow(amount = '', remark = '') {
-  document.getElementById('svmDepositList').insertAdjacentHTML('beforeend', entryRowHtml(amount, remark, 'dep'));
+function addDepositRow(amount = '', remark = '', date = '') {
+  document.getElementById('svmDepositList').insertAdjacentHTML('beforeend', entryRowHtml(amount, remark, 'dep', date));
   recomputeModalTotals();
 }
-function addWithdrawRow(amount = '', remark = '') {
-  document.getElementById('svmWithdrawList').insertAdjacentHTML('beforeend', entryRowHtml(amount, remark, 'wd'));
+function addWithdrawRow(amount = '', remark = '', date = '') {
+  document.getElementById('svmWithdrawList').insertAdjacentHTML('beforeend', entryRowHtml(amount, remark, 'wd', date));
   recomputeModalTotals();
 }
 function removeEntryRow(btn) {
@@ -572,10 +627,16 @@ function sumEntries(listId) {
   return [...document.getElementById(listId).querySelectorAll('.sv-entry-row')]
     .reduce((a, r) => a + (parseFloat(r.querySelector('.sv-entry-amt').value) || 0), 0);
 }
-// Read entries, dropping fully-empty rows (no amount and no remark).
+// Read entries, dropping fully-empty rows (no amount and no remark). A day-of-month
+// is captured when present so daily-basis interest can weight it.
 function readEntries(listId) {
   return [...document.getElementById(listId).querySelectorAll('.sv-entry-row')]
-    .map(r => ({ amount: round2(parseFloat(r.querySelector('.sv-entry-amt').value) || 0), remark: r.querySelector('.sv-entry-remark').value.trim() }))
+    .map(r => {
+      const day = parseInt(r.querySelector('.sv-entry-date').value, 10);
+      const e = { amount: round2(parseFloat(r.querySelector('.sv-entry-amt').value) || 0), remark: r.querySelector('.sv-entry-remark').value.trim() };
+      if (Number.isFinite(day)) e.date = Math.min(31, Math.max(1, day));
+      return e;
+    })
     .filter(e => e.amount !== 0 || e.remark !== '');
 }
 
@@ -588,6 +649,8 @@ function recomputeModalTotals() {
 function openSavingsMonthModal(monthKey) {
   const row = buildFullSchedule().find(r => r.month === monthKey);
   if (!row) return;
+  const cfg = getConfig();
+  modalDailyMode = cfg.interestBasis === 'daily';
 
   document.getElementById('svmMonth').value = monthKey;
   document.getElementById('svmMonthLabel').textContent = row.label;
@@ -597,9 +660,13 @@ function openSavingsMonthModal(monthKey) {
   document.getElementById('svmFixedDeposit').value = row.fixedDeposit.toFixed(2);
   document.getElementById('svmIsActual').checked = row.status === 'actual';
 
+  // Show the "on day N" hint for the fixed deposit only in daily mode.
+  const depHint = document.getElementById('svmFixedDepositHint');
+  if (depHint) depHint.textContent = modalDailyMode ? `Fixed monthly deposit · lands day ${clamp(Math.round(cfg.depositDay || 1), 1, daysInMonth(monthKey))}` : 'Fixed monthly deposit';
+
   // Rebuild the ad-hoc deposit / withdrawal lists from the stored entries.
-  document.getElementById('svmDepositList').innerHTML = (row.deposits || []).map(e => entryRowHtml(e.amount, e.remark, 'dep')).join('');
-  document.getElementById('svmWithdrawList').innerHTML = (row.withdrawals || []).map(e => entryRowHtml(e.amount, e.remark, 'wd')).join('');
+  document.getElementById('svmDepositList').innerHTML = (row.deposits || []).map(e => entryRowHtml(e.amount, e.remark, 'dep', e.date)).join('');
+  document.getElementById('svmWithdrawList').innerHTML = (row.withdrawals || []).map(e => entryRowHtml(e.amount, e.remark, 'wd', e.date)).join('');
   recomputeModalTotals();
 
   // Show a revert control only when there's a stored record to clear.
