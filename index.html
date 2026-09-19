@@ -65,6 +65,9 @@
                     <button onclick="switchTab('medical')" id="tabBtn-medical" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
                         <i class="fa-solid fa-pills mr-1.5"></i>Medical Records
                     </button>
+                    <button onclick="switchTab('vehicle')" id="tabBtn-vehicle" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
+                        <i class="fa-solid fa-car mr-1.5"></i>Vehicle
+                    </button>
                     <button onclick="switchTab('koofrSync')" id="tabBtn-koofrSync" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
                         <i class="fa-solid fa-cloud mr-1.5"></i>Koofr Sync
                     </button>
@@ -797,6 +800,10 @@
                                 <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Receipt Payment Methods (Comma separated — your cards are added automatically)</label>
                                 <input type="text" id="settingsPaymentMethods" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono" placeholder="Touch 'n Go eWallet, GrabPay, Boost, Cash, Bank Transfer">
                             </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Vehicle Expense Categories (Comma separated)</label>
+                                <input type="text" id="settingsVehicleCategories" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono" placeholder="Service, Repair, Tyre, Battery, Insurance, Road Tax, Fuel, Toll, Parking">
+                            </div>
                             <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs uppercase tracking-wider transition">
                                 Apply Settings
                             </button>
@@ -938,6 +945,27 @@
                     <div class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3">
                         <input type="checkbox" id="recLogMedical" class="w-4 h-4 rounded border-gray-800 text-teal-500 bg-gray-950 focus:ring-teal-500 cursor-pointer">
                         <label for="recLogMedical" class="text-xs font-semibold text-slate-300 cursor-pointer">Log to Medicine &amp; Records — stores all photos + raw OCR for enrichment</label>
+                    </div>
+
+                    <div class="bg-gray-950 border border-gray-800/80 rounded-xl p-3 space-y-3">
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="recLogVehicle" onchange="recLogVehicleChange()" class="w-4 h-4 rounded border-gray-800 text-amber-500 bg-gray-950 focus:ring-amber-500 cursor-pointer">
+                            <label for="recLogVehicle" class="text-xs font-semibold text-slate-300 cursor-pointer">Record into Vehicle — service, repair, fuel, road tax… stores all photos + raw OCR for enrichment</label>
+                        </div>
+                        <div id="recVehicleFields" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Vehicle</label>
+                                <select id="recVehicle" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500"></select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Category</label>
+                                <select id="recVehicleCategory" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500"></select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Odometer km (optional)</label>
+                                <input type="number" step="1" id="recOdometer" placeholder="e.g. 85210" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
+                            </div>
+                        </div>
                     </div>
 
                     <details class="bg-gray-950 border border-gray-800 rounded-xl p-3">
@@ -1193,6 +1221,113 @@
                     <div class="glass-card rounded-2xl p-6">
                         <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3">Insurance vs Patient</h3>
                         <div class="h-48"><canvas id="medSplitChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tabContent-vehicle" class="hidden space-y-6">
+            <!-- Optional reminders: service due / road tax + insurance expiry (only shows when something is due) -->
+            <div id="vehReminders" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+
+            <!-- KPI dashboard -->
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Total Spend</span>
+                    <h2 id="vehKpiTotal" class="text-lg font-bold text-slate-100 font-mono">RM 0.00</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Records</span>
+                    <h2 id="vehKpiRecords" class="text-lg font-bold text-teal-400 font-mono">0</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Distance (optional)</span>
+                    <h2 id="vehKpiKm" class="text-lg font-bold text-indigo-400 font-mono">&mdash;</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Cost / km</span>
+                    <h2 id="vehKpiPerKm" class="text-lg font-bold text-amber-400 font-mono">&mdash;</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Awaiting Enrichment</span>
+                    <h2 id="vehKpiRaw" class="text-lg font-bold text-violet-400 font-mono">0</h2>
+                </div>
+            </div>
+
+            <!-- Toolbar: filters + actions -->
+            <div class="glass-card rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                <div class="flex flex-wrap gap-2">
+                    <select id="vehFilterYear" onchange="onVehicleFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold"><option value="ALL">All Years</option></select>
+                    <select id="vehFilterMonth" onchange="onVehicleFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
+                        <option value="ALL">All Months</option>
+                        <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+                        <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+                        <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+                        <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+                    </select>
+                    <select id="vehFilterVehicle" onchange="onVehicleFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold"><option value="ALL">All Vehicles</option></select>
+                    <select id="vehFilterCategory" onchange="onVehicleFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold"><option value="ALL">All Categories</option></select>
+                    <input type="search" id="vehFilterSearch" oninput="onVehicleFilterChange()" placeholder="Search part / workshop..." class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 w-44">
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="openVehicleModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-plus mr-1"></i>Add Record</button>
+                    <button onclick="exportVehicleRaw('selected')" title="Export the ticked records to send to Claude" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-200 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-file-export mr-1"></i>Export selected</button>
+                    <button onclick="exportVehicleRaw('new')" title="Export all not-yet-enriched records" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-400 font-bold py-2 px-2.5 rounded-xl text-[11px] uppercase tracking-wider transition">New</button>
+                    <button onclick="exportVehicleRaw('all')" title="Export all records" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-400 font-bold py-2 px-2.5 rounded-xl text-[11px] uppercase tracking-wider transition">All</button>
+                    <label for="vehImportFile" class="cursor-pointer bg-gray-900 border border-gray-800 hover:border-emerald-500 text-slate-200 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition inline-flex items-center"><i class="fa-solid fa-file-import mr-1"></i>Import JSON</label>
+                    <input type="file" id="vehImportFile" accept="application/json,.json" onchange="handleVehicleImportFile(this)" class="hidden">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 glass-card rounded-2xl p-6 space-y-3">
+                    <div class="border-b border-gray-800 pb-3">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200">Vehicle Records</h3>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Raw OCR captured from receipts; enrich via Claude whenever you like (Export &rarr; Import) or edit by hand. Card spend stays separate in the CC Dashboard.</p>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="text-[9px] uppercase tracking-wider text-slate-500 border-b border-gray-800">
+                                <tr>
+                                    <th class="py-2 px-3 text-center"><input type="checkbox" onchange="toggleAllVehicle(this)" title="Select all" class="accent-indigo-500"></th>
+                                    <th class="py-2 px-4">Record</th>
+                                    <th class="py-2 px-4">Category</th>
+                                    <th class="py-2 px-4 text-right">Odometer</th>
+                                    <th class="py-2 px-4 text-right">Amount</th>
+                                    <th class="py-2 px-4 text-center">Items</th>
+                                    <th class="py-2 px-4 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vehLedgerBody" class="divide-y divide-gray-800/60 text-slate-300"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="space-y-6">
+                    <div class="glass-card rounded-2xl p-6 space-y-3">
+                        <div>
+                            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200"><i class="fa-solid fa-warehouse text-amber-400 mr-1.5"></i>Garage</h3>
+                            <p class="text-[10px] text-slate-500 mt-0.5">Add your own vehicles &mdash; they appear in the receipt capture picker.</p>
+                        </div>
+                        <div id="vehGarageList" class="space-y-2"></div>
+                        <form id="vehGarageForm" onsubmit="handleVehicleFormSubmit(event)" class="space-y-2 border-t border-gray-800 pt-3">
+                            <input type="text" id="vehGarageName" placeholder="Name (e.g. Myvi)" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="text" id="vehGaragePlate" placeholder="Plate" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
+                                <input type="text" id="vehGarageModel" placeholder="Model (optional)" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="submit" id="vehGarageSubmit" class="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 rounded-xl text-[11px] uppercase tracking-wider transition">Add vehicle</button>
+                                <button type="button" id="vehGarageCancel" onclick="cancelVehicleEdit()" class="hidden bg-gray-900 border border-gray-800 hover:border-slate-500 text-slate-300 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="glass-card rounded-2xl p-6">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3">Spend by Month</h3>
+                        <div class="h-48"><canvas id="vehTrendChart"></canvas></div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-6">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3">Spend by Category</h3>
+                        <div class="h-48"><canvas id="vehSplitChart"></canvas></div>
                     </div>
                 </div>
             </div>
@@ -1540,6 +1675,77 @@
         </div>
     </div>
 
+
+    <!-- Vehicle Record Modal -->
+    <div id="vehicleModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="glass-card w-full max-w-lg rounded-2xl p-6 space-y-4 m-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <h3 id="vehModalTitle" class="text-sm font-bold text-amber-400 uppercase tracking-widest"><i class="fa-solid fa-car mr-1.5"></i>Vehicle Record</h3>
+                <button onclick="closeVehicleModal()" class="text-slate-400 hover:text-slate-100"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="vehicleForm" onsubmit="handleVehicleSubmit(event)" class="space-y-3">
+                <input type="hidden" id="vehRecId">
+                <div id="vehRecPhotos" class="flex flex-wrap gap-2"></div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Vehicle</label>
+                        <select id="vehRecVehicle" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Category</label>
+                        <select id="vehRecCategory" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Date</label>
+                        <input type="date" id="vehRecDate" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Workshop / Merchant</label>
+                        <input type="text" id="vehRecMerchant" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Currency</label>
+                        <input type="text" id="vehRecCurrency" value="MYR" oninput="vehRecalc()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Amount Paid</label>
+                        <input type="number" step="0.01" id="vehRecAmount" oninput="vehRecalc()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-amber-300 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Labour (optional)</label>
+                        <input type="number" step="0.01" id="vehRecLabour" oninput="vehRecalc()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Odometer km (optional)</label>
+                        <input type="number" step="1" id="vehRecOdometer" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                </div>
+
+                <div class="flex items-center justify-between bg-gray-950 border border-gray-800/80 rounded-xl px-3 py-2">
+                    <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Amount Paid</span>
+                    <span id="vehRecTotalDisplay" class="text-sm font-bold text-slate-100 font-mono">MYR 0.00</span>
+                </div>
+                <p id="vehRecReconcile" class="text-[10px] text-rose-400 hidden"></p>
+
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Parts &amp; Items (optional)</label>
+                        <button type="button" onclick="addPartRow()" class="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold"><i class="fa-solid fa-plus mr-1"></i>Add item</button>
+                    </div>
+                    <div id="vehPartRows" class="space-y-2"></div>
+                </div>
+
+                <details class="bg-gray-950 border border-gray-800 rounded-xl p-3">
+                    <summary class="text-[10px] uppercase tracking-wider text-slate-400 font-bold cursor-pointer">Reminders &amp; warranty (optional)</summary>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                        <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Next service date</label>
+                            <input type="date" id="vehRecNextServiceDate" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
+                        <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Next service at km</label>
+                            <input type="number" step="1" id="vehRecNextServiceKm" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                        <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Expiry (road tax / insurance)</label>
+                            <input type="date" id="vehRecExpiry" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
+                        <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Warranty until</label>
+                            <input type="date" id="vehRecWarranty" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
+                    </div>
+                </details>
+
+                <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Remark</label>
+                    <input type="text" id="vehRecRemark" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+
+                <details class="bg-gray-950 border border-gray-800 rounded-xl p-3">
+                    <summary class="text-[10px] uppercase tracking-wider text-slate-400 font-bold cursor-pointer">Raw OCR (source for export)</summary>
+                    <textarea id="vehRecRawOcr" readonly class="w-full h-24 mt-2 bg-gray-900 border border-gray-800 rounded-lg px-2 py-1.5 text-[10px] text-slate-400 font-mono"></textarea>
+                </details>
+
+                <button type="submit" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition">Save Record</button>
+            </form>
+        </div>
+    </div>
+
     <!--
       Cache-busting module loader. GitHub Pages serves src/*.js with a fixed
       Cache-Control: max-age=600, and ES module sub-imports (./calc.js etc.) do
@@ -1550,12 +1756,12 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.08.03-1';
+      window.APP_VERSION = '2026.09.19-1';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','merge','dashboard','dropdowns',
           'ui','charts','calc','cards','optimizer','sspn','transactions',
-          'claims','medical','autosync','receipts','ocr','excel','main'];
+          'claims','medical','vehicle','savings','autosync','receipts','ocr','excel','main'];
         var imports = {};
         mods.forEach(function (m) { imports['./src/' + m + '.js'] = './src/' + m + '.js?v=' + v; });
         var im = document.createElement('script');

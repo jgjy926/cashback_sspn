@@ -27,6 +27,8 @@ export function migrate(db) {
   if (!Array.isArray(db.receipts)) db.receipts = [];
   if (!Array.isArray(db.claims)) db.claims = [];
   if (!Array.isArray(db.medicalRecords)) db.medicalRecords = [];
+  if (!Array.isArray(db.vehicles)) db.vehicles = [];
+  if (!Array.isArray(db.vehicleRecords)) db.vehicleRecords = [];
   if (!Array.isArray(db.savingsMonths)) db.savingsMonths = [];
   if (!Array.isArray(db.cards)) db.cards = [];
   if (!Array.isArray(db.deletions)) db.deletions = []; // tombstone log for cross-device deletes
@@ -35,6 +37,10 @@ export function migrate(db) {
   if (!Array.isArray(db.settings.claimTypes)) db.settings.claimTypes = ['Medical', 'Insurance', 'Tax Relief'];
   if (!Array.isArray(db.settings.claimStatuses)) db.settings.claimStatuses = ['Not Submitted', 'Submitted', 'Approved', 'Reimbursed', 'Rejected'];
   if (!Array.isArray(db.settings.paymentMethods)) db.settings.paymentMethods = ["Touch 'n Go eWallet", 'GrabPay', 'Boost', 'ShopeePay', 'DuitNow QR', 'Cash', 'Bank Transfer'];
+  // Vehicle expense taxonomy — adding a category here needs no code change.
+  if (!Array.isArray(db.settings.vehicleCategories) || !db.settings.vehicleCategories.length) {
+    db.settings.vehicleCategories = ['Service', 'Repair', 'Tyre', 'Battery', 'Insurance', 'Road Tax', 'Fuel', 'Toll', 'Parking', 'Summons', 'Accessory', 'Other'];
+  }
   // Saving-account interest forecast config — backfill defaults without clobbering user edits.
   if (!db.settings.savingsConfig || typeof db.settings.savingsConfig !== 'object') db.settings.savingsConfig = {};
   {
@@ -157,6 +163,9 @@ export function loadFromLocalStorage() {
     }
     if (document.getElementById('settingsPaymentMethods')) {
       document.getElementById('settingsPaymentMethods').value = (database.settings.paymentMethods || []).join(', ');
+    }
+    if (document.getElementById('settingsVehicleCategories')) {
+      document.getElementById('settingsVehicleCategories').value = (database.settings.vehicleCategories || []).join(', ');
     }
   }
 

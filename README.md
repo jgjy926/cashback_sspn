@@ -32,7 +32,9 @@ src/                 ES modules (no build step — served as-is)
   sync.js            cloud push/pull with version-based conflict detection
   ocr.js             client-side image compression + OCR call + field parsing
   receipts.js        receipt capture/upload/list, ledger linking
-  calc, dashboard, transactions, cards, optimizer, sspn, charts, excel, ui, dropdowns
+  medical.js         Medicine & Records: OCR -> export JSON -> enrich in Claude -> import
+  vehicle.js         Vehicle & Transport: same enrichment flow, per-vehicle running costs
+  calc, dashboard, transactions, cards, optimizer, sspn, savings, charts, excel, ui, dropdowns
 worker/
   worker.js          Cloudflare Worker (routed, authenticated gateway)
   wrangler.toml      config + secret documentation
@@ -95,6 +97,24 @@ for a free Workers AI second opinion that overrides only the low-confidence fiel
 editable confirm form → `PUT /receipt/<id>` stores the image in Koofr `/receipts/` →
 ledger keeps only `{ merchant, date, total, …, imagePath }` (no image bytes). Optionally
 the receipt is also logged as a credit-card transaction.
+
+## Vehicle & Transport
+
+Capture a workshop / petrol / road tax receipt in the **Receipts** tab and tick **Record into
+Vehicle** (choose the vehicle, category and, optionally, the odometer). The record lands in the
+**Vehicle** tab as *Raw*, carrying every photo and the combined OCR text.
+
+Enrichment is optional and can happen any time later: **Export** (Selected / New / All) produces
+one JSON file, Claude turns each `rawOcr` into an itemised record, and **Import JSON** writes it
+back by `id`. Nothing is ever required — every field stays editable by hand.
+
+"Log to credit-card ledger" is an independent tick: a card-paid repair is logged for cashback
+*and* recorded against the vehicle, cross-linked by `txId`. Vehicle totals count only vehicle
+records, so the two views never double count, and cash / e-wallet spend is tracked just as well.
+
+Optional extras, all blank-by-default: odometer (drives distance + cost/km), next-service date or
+mileage, road tax / insurance expiry, and part warranty — the ones that fall due within 60 days
+(or 1,000 km) surface as a banner at the top of the tab.
 
 The AI review is **gated** (only fires on low-confidence scans), **text-only** (no
 image re-upload, so it ignores the 1 MB OCR cap), and can be toggled off per device

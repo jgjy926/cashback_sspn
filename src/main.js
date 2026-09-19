@@ -15,6 +15,7 @@ import * as sync from './sync.js';
 import * as receipts from './receipts.js';
 import * as claims from './claims.js';
 import * as medical from './medical.js';
+import * as vehicle from './vehicle.js';
 import * as savings from './savings.js';
 import * as autosync from './autosync.js';
 import { loadFromLocalStorage } from './storage.js';
@@ -24,10 +25,11 @@ import { refreshLedgerAndCalculations, applyCurrentMonthDefaults } from './dashb
 import { renderReceipts } from './receipts.js';
 import { renderClaims } from './claims.js';
 import { renderMedical } from './medical.js';
+import { renderVehicle } from './vehicle.js';
 import { renderSavings } from './savings.js';
 import { initAutoSync } from './autosync.js';
 
-Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts, claims, medical, savings, autosync);
+Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts, claims, medical, vehicle, savings, autosync);
 
 window.addEventListener('load', () => {
   loadFromLocalStorage();
@@ -38,6 +40,7 @@ window.addEventListener('load', () => {
   renderReceipts();
   renderClaims();
   renderMedical();
+  renderVehicle();
   renderSavings();
   initAutoSync();                // pull on open + auto-push on change + periodic refresh
 });

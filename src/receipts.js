@@ -3,6 +3,7 @@ import { saveToLocalStorage } from './storage.js';
 import { refreshLedgerAndCalculations } from './dashboard.js';
 import { renderClaims } from './claims.js';
 import { createMedicalRecordFromReceipt, renderMedical } from './medical.js';
+import { createVehicleRecordFromReceipt, renderVehicle, vehicleOptionsHtml, vehicleCategoryOptionsHtml } from './vehicle.js';
 import { showToast } from './ui.js';
 import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant,
   aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD, AI_FIELD_CEILING } from './ocr.js';
@@ -220,6 +221,9 @@ function fillReceiptForm(parsed, text) {
   document.getElementById('recClaimType').innerHTML = claimTypeOptions();
   document.getElementById('recClaimStatus').innerHTML = claimStatusOptions();
   document.getElementById('recPayment').innerHTML = paymentMethodOptions();
+  document.getElementById('recVehicle').innerHTML = vehicleOptionsHtml();
+  document.getElementById('recVehicleCategory').innerHTML = vehicleCategoryOptionsHtml();
+  recLogVehicleChange();  // start collapsed; the tick reveals the vehicle fields
   recCardChange();
   recClaimTypeChange(); // arm claim routing to match the pre-selected claim type
   document.getElementById('recMerchant').value = merchant || '';
@@ -255,6 +259,12 @@ function aiRefineInBackground(text, parsed) {
     if (p.total != null && totalEl.value === filled.total) totalEl.value = p.total.toFixed(2);
     status.innerText = baseNote + ' · AI-assisted ✓';
   }).catch(() => { status.innerText = baseNote; });
+}
+
+// The vehicle picker only matters once the tick is on, so it stays out of the way until then.
+export function recLogVehicleChange() {
+  const on = document.getElementById('recLogVehicle').checked;
+  document.getElementById('recVehicleFields').classList.toggle('hidden', !on);
 }
 
 export function recCardChange() {
@@ -302,6 +312,7 @@ export async function saveReceipt(e) {
   const alsoLog = document.getElementById('recAlsoLog').checked;
   const linkClaim = document.getElementById('recLinkClaim').checked;
   const logMedical = document.getElementById('recLogMedical').checked;
+  const logVehicle = document.getElementById('recLogVehicle').checked;
 
   let txId = null;
   if (alsoLog && total > 0 && cardId) {
@@ -320,11 +331,13 @@ export async function saveReceipt(e) {
   if (linkClaim) receipt.claimId = createClaimFromReceipt(receipt);
   const claimId = receipt.claimId;
 
-  // Log to Medicine & Records: group ALL photos (primary + extras) and the combined raw OCR.
-  // The primary is already stored as receipt/<id>; upload the extras under their own ids.
-  let medId = null;
-  if (logMedical) {
-    const imagePaths = [`receipt/${id}`];
+  // Grouped destinations (Medicine & Records, Vehicle) keep ALL photos (primary + extras) and the
+  // combined raw OCR. The primary is already stored as receipt/<id>; the extras are uploaded under
+  // their own ids ONCE and shared, so ticking both destinations never uploads a photo twice.
+  let groupPaths = null;
+  async function groupPhotoPaths() {
+    if (groupPaths) return groupPaths;
+    groupPaths = [`receipt/${id}`];
     for (let i = 1; i < pendingPhotos.length; i++) {
       const pid = 'rcpt-' + Date.now() + Math.random().toString(36).slice(2, 6);
       try {
@@ -333,11 +346,29 @@ export async function saveReceipt(e) {
           headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'image/jpeg' },
           body: pendingPhotos[i].blob,
         });
-        if (res.ok) imagePaths.push(`receipt/${pid}`);
+        if (res.ok) groupPaths.push(`receipt/${pid}`);
         else showToast(`Photo ${i + 1} upload failed — skipped.`, 'error');
       } catch { showToast(`Photo ${i + 1} upload failed — skipped.`, 'error'); }
     }
-    medId = createMedicalRecordFromReceipt(receipt, { imagePaths, rawOcr: combinedOcrText() });
+    return groupPaths;
+  }
+
+  let medId = null;
+  if (logMedical) {
+    medId = createMedicalRecordFromReceipt(receipt, { imagePaths: await groupPhotoPaths(), rawOcr: combinedOcrText() });
+  }
+
+  // Log to Vehicle & Transport. The record saves as "Raw" — enrich it any time later from the
+  // Vehicle tab (Export → Claude → Import), or just type the details in.
+  let vehId = null;
+  if (logVehicle) {
+    vehId = createVehicleRecordFromReceipt(receipt, {
+      imagePaths: await groupPhotoPaths(),
+      rawOcr: combinedOcrText(),
+      vehicleId: document.getElementById('recVehicle').value,
+      category: document.getElementById('recVehicleCategory').value,
+      odometer: document.getElementById('recOdometer').value,
+    });
   }
 
   // Self-learning: remember the merchant the user confirmed for these receipt tokens.
@@ -348,6 +379,7 @@ export async function saveReceipt(e) {
   renderReceipts();
   renderClaims();
   renderMedical();
+  renderVehicle();
 
   pendingPhotos = [];
   pending = null;
@@ -358,7 +390,8 @@ export async function saveReceipt(e) {
   document.getElementById('receiptThumbs').innerHTML = '';
   document.getElementById('receiptFile').value = '';
   document.getElementById('receiptOcrStatus').innerText = '';
-  const dest = [txId && 'ledger', claimId && 'claims', medId && 'medical records'].filter(Boolean).join(' & ');
+  document.getElementById('recVehicleFields').classList.add('hidden');
+  const dest = [txId && 'ledger', claimId && 'claims', medId && 'medical records', vehId && 'vehicle'].filter(Boolean).join(' & ');
   showToast(dest ? `Receipt saved (added to ${dest}).` : 'Receipt saved.', 'success');
 }
 
