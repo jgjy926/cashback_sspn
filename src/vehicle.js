@@ -11,6 +11,7 @@
 import { database } from './state.js';
 import { saveToLocalStorage } from './storage.js';
 import { askConfirm, showToast } from './ui.js';
+import { openEnrichPanel, parseEnrichedJson, normalizeEnriched } from './enrich.js';
 
 // ---- import/export contract ----
 const EXPORT_TYPE = 'vehicle-raw-export';
@@ -572,8 +573,9 @@ const CLAUDE_INSTRUCTIONS =
   'expiryDate (road tax / insurance coverage end date as YYYY-MM-DD, else ""), ' +
   'and warrantyUntil (part or workmanship warranty end date as YYYY-MM-DD, else ""). ' +
   'Amounts are the figures printed on the receipt — never invent or estimate a value that is not there; use 0 or "" instead. ' +
-  'Return ONLY one JSON object, no prose, of the form: ' +
-  '{ "type": "vehicle-enriched-import", "schemaVersion": 1, "records": [ <one enriched record per input record> ] }.';
+  'Return ONLY one strictly valid JSON object, no prose, of the form: ' +
+  '{ "type": "vehicle-enriched-import", "schemaVersion": 1, "records": [ <one enriched record per input record> ] }. ' +
+  'Never put a double quote inside a string value — use single quotes instead.';
 
 // Strip the noise that makes OCR dumps token-heavy without helping extraction: runs of blank
 // lines, trailing spaces, and repeated separator rows ("-----", "=====", "*****").
@@ -587,22 +589,22 @@ function tidyOcr(text) {
     .trim();
 }
 
-// scope: 'selected' (ticked rows), 'new' (un-enriched), or 'all'.
-export function exportVehicleRaw(scope) {
+// scope: 'selected' (ticked rows), 'new' (un-enriched), or 'all'. Returns { payload } or { error }.
+function vehicleExportPayload(scope) {
   const records = database.vehicleRecords || [];
   let src;
   if (scope === 'selected') {
     const ids = new Set(pickedVehicleIds());
-    if (!ids.size) { showToast('Tick the records you want to export first (checkboxes on the left).', 'error'); return; }
+    if (!ids.size) return { error: 'Tick the records you want to export first (checkboxes on the left).' };
     src = records.filter(r => ids.has(r.id));
   } else if (scope === 'all') {
     src = records;
   } else { // 'new' — everything not yet enriched
     src = records.filter(r => !r.enriched);
-    if (!src.length) { showToast('Nothing new to enrich — every record is already enriched. Use “Selected” or “All”.', 'error'); return; }
+    if (!src.length) return { error: 'Nothing new to enrich — every record is already enriched. Use “Selected” or “All”.' };
   }
-  if (!src.length) { showToast('No vehicle records to export yet.', 'error'); return; }
-  downloadJson({
+  if (!src.length) return { error: 'No vehicle records to export yet.' };
+  return { payload: {
     type: EXPORT_TYPE,
     schemaVersion: IO_SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
@@ -618,8 +620,24 @@ export function exportVehicleRaw(scope) {
       id: r.id, date: r.date, merchant: r.merchant, currency: r.currency,
       category: r.category, amount: num(r.amount), rawOcr: tidyOcr(r.rawOcr),
     })),
-  }, `vehicle-raw-${today()}.json`);
-  showToast(`Exported ${src.length} record(s). Open Claude, attach this file, then import the JSON it returns.`, 'success');
+  } };
+}
+
+export function exportVehicleRaw(scope) {
+  const { payload, error } = vehicleExportPayload(scope);
+  if (error) { showToast(error, 'error'); return; }
+  downloadJson(payload, `vehicle-raw-${today()}.json`);
+  showToast(`Exported ${payload.records.length} record(s). Open Claude, attach this file, then import the JSON it returns.`, 'success');
+}
+
+// ---------- copy/paste round-trip : prompt out, Claude's reply pasted back ----------
+export function openVehicleEnrichPanel() {
+  openEnrichPanel({
+    title: 'Enrich vehicle records with Claude',
+    defaultScope: pickedVehicleIds().length ? 'selected' : 'new',
+    build: vehicleExportPayload,
+    importData: importVehicleEnriched,
+  });
 }
 
 // ---------- import (one file) : enriched JSON back from Claude (or hand-edited) ----------
@@ -628,20 +646,22 @@ export function handleVehicleImportFile(input) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    let data;
-    try { data = JSON.parse(reader.result); }
-    catch { showToast('Import failed: the file is not valid JSON.', 'error'); input.value = ''; return; }
-    importVehicleEnriched(data);
     input.value = '';
+    let data;
+    try { data = normalizeEnriched(parseEnrichedJson(reader.result)); }
+    catch (err) { showToast(`Import failed: ${err.message}`, 'error'); return; }
+    const res = importVehicleEnriched(data);
+    showToast(res.message, res.ok ? 'success' : 'error');
   };
   reader.onerror = () => { showToast('Could not read the file.', 'error'); input.value = ''; };
   reader.readAsText(file);
 }
 
+// Returns { ok, message }; the caller decides how to surface it.
 function importVehicleEnriched(data) {
-  if (!data || data.type !== IMPORT_TYPE || !Array.isArray(data.records)) {
-    showToast(`Import failed: expected a "${IMPORT_TYPE}" file with a "records" array.`, 'error');
-    return;
+  // A missing "type" is tolerated (Claude sometimes drops it); a different type is not.
+  if (!data || (data.type && data.type !== IMPORT_TYPE) || !Array.isArray(data.records)) {
+    return { ok: false, message: `Import failed: expected a "${IMPORT_TYPE}" object with a "records" array.` };
   }
   const cats = vehicleCategories();
   let updated = 0, unknown = 0, mismatch = 0;
@@ -677,5 +697,5 @@ function importVehicleEnriched(data) {
   let msg = `Imported: ${updated} record(s) updated`;
   if (unknown) msg += ` · ${unknown} unknown id(s) skipped`;
   if (mismatch) msg += ` · ${mismatch} need a total check`;
-  showToast(msg, updated ? 'success' : 'error');
+  return { ok: updated > 0, message: updated ? msg : `${msg} — none of the ids match your records.` };
 }

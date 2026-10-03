@@ -7,6 +7,7 @@
 import { database } from './state.js';
 import { saveToLocalStorage } from './storage.js';
 import { askConfirm, showToast } from './ui.js';
+import { openEnrichPanel, parseEnrichedJson, normalizeEnriched } from './enrich.js';
 
 // ---- import/export contract ----
 const EXPORT_TYPE = 'medical-raw-export';
@@ -344,33 +345,50 @@ const CLAUDE_INSTRUCTIONS =
   'Extract: merchant (clinic/pharmacy name), date (YYYY-MM-DD), currency (default MYR), consultation (consultation/doctor fee as a number, 0 if none), ' +
   'and medicines as an array of { "name", "qty", "amount" } for each medicine/drug line. ' +
   'Do NOT invent amounts that are not present in the text. Leave amountInsurance and amountPatient as 0 unless the text clearly states a split — the user sets the coverage split themselves. ' +
-  'Return ONLY one JSON object, no prose, of the form: ' +
-  '{ "type": "medical-enriched-import", "schemaVersion": 1, "records": [ <one enriched record per input record> ] }.';
+  'Return ONLY one strictly valid JSON object, no prose, of the form: ' +
+  '{ "type": "medical-enriched-import", "schemaVersion": 1, "records": [ <one enriched record per input record> ] }. ' +
+  'Never put a double quote inside a string value — use single quotes instead.';
 
-// scope: 'selected' (ticked rows), 'new' (un-enriched), or 'all'.
-export function exportMedicalRaw(scope) {
+// scope: 'selected' (ticked rows), 'new' (un-enriched), or 'all'. Returns { payload } or { error }.
+function medicalExportPayload(scope) {
   const records = database.medicalRecords || [];
   let src;
   if (scope === 'selected') {
     const ids = new Set(pickedMedicalIds());
-    if (!ids.size) { showToast('Tick the records you want to export first (checkboxes on the left).', 'error'); return; }
+    if (!ids.size) return { error: 'Tick the records you want to export first (checkboxes on the left).' };
     src = records.filter(r => ids.has(r.id));
   } else if (scope === 'all') {
     src = records;
   } else { // 'new' — everything not yet enriched
     src = records.filter(r => !r.enriched);
-    if (!src.length) { showToast('Nothing new to enrich — every record is already enriched. Use “Selected” or “All”.', 'error'); return; }
+    if (!src.length) return { error: 'Nothing new to enrich — every record is already enriched. Use “Selected” or “All”.' };
   }
-  if (!src.length) { showToast('No medical records to export yet.', 'error'); return; }
-  downloadJson({
+  if (!src.length) return { error: 'No medical records to export yet.' };
+  return { payload: {
     type: EXPORT_TYPE,
     schemaVersion: IO_SCHEMA_VERSION,
     generatedAt: new Date().toISOString(),
     instructions: CLAUDE_INSTRUCTIONS,
     targetSchema: { id: '', date: 'YYYY-MM-DD', merchant: '', currency: 'MYR', consultation: 0, medicines: [{ name: '', qty: 1, amount: 0 }], amountInsurance: 0, amountPatient: 0, remark: '' },
     records: src.map(r => ({ id: r.id, date: r.date, merchant: r.merchant, currency: r.currency, imagePaths: r.imagePaths || [], rawOcr: r.rawOcr || '' })),
-  }, `medical-raw-${new Date().toISOString().slice(0, 10)}.json`);
-  showToast(`Exported ${src.length} record(s). Open Claude, attach this file, then import the JSON it returns.`, 'success');
+  } };
+}
+
+export function exportMedicalRaw(scope) {
+  const { payload, error } = medicalExportPayload(scope);
+  if (error) { showToast(error, 'error'); return; }
+  downloadJson(payload, `medical-raw-${new Date().toISOString().slice(0, 10)}.json`);
+  showToast(`Exported ${payload.records.length} record(s). Open Claude, attach this file, then import the JSON it returns.`, 'success');
+}
+
+// ---------- copy/paste round-trip : prompt out, Claude's reply pasted back ----------
+export function openMedicalEnrichPanel() {
+  openEnrichPanel({
+    title: 'Enrich medical records with Claude',
+    defaultScope: pickedMedicalIds().length ? 'selected' : 'new',
+    build: medicalExportPayload,
+    importData: importMedicalEnriched,
+  });
 }
 
 // ---------- import (one file) : enriched JSON back from Claude (or hand-edited) ----------
@@ -379,20 +397,22 @@ export function handleMedicalImportFile(input) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
-    let data;
-    try { data = JSON.parse(reader.result); }
-    catch { showToast('Import failed: the file is not valid JSON.', 'error'); input.value = ''; return; }
-    importMedicalEnriched(data);
     input.value = '';
+    let data;
+    try { data = normalizeEnriched(parseEnrichedJson(reader.result)); }
+    catch (err) { showToast(`Import failed: ${err.message}`, 'error'); return; }
+    const res = importMedicalEnriched(data);
+    showToast(res.message, res.ok ? 'success' : 'error');
   };
   reader.onerror = () => { showToast('Could not read the file.', 'error'); input.value = ''; };
   reader.readAsText(file);
 }
 
+// Returns { ok, message }; the caller decides how to surface it.
 function importMedicalEnriched(data) {
-  if (!data || data.type !== IMPORT_TYPE || !Array.isArray(data.records)) {
-    showToast(`Import failed: expected a "${IMPORT_TYPE}" file with a "records" array.`, 'error');
-    return;
+  // A missing "type" is tolerated (Claude sometimes drops it); a different type is not.
+  if (!data || (data.type && data.type !== IMPORT_TYPE) || !Array.isArray(data.records)) {
+    return { ok: false, message: `Import failed: expected a "${IMPORT_TYPE}" object with a "records" array.` };
   }
   let updated = 0, unknown = 0, mismatch = 0;
   data.records.forEach(rec => {
@@ -421,5 +441,5 @@ function importMedicalEnriched(data) {
   let msg = `Imported: ${updated} record(s) updated`;
   if (unknown) msg += ` · ${unknown} unknown id(s) skipped`;
   if (mismatch) msg += ` · ${mismatch} need a total check`;
-  showToast(msg, updated ? 'success' : 'error');
+  return { ok: updated > 0, message: updated ? msg : `${msg} — none of the ids match your records.` };
 }
