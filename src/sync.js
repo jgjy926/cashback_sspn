@@ -29,7 +29,15 @@ async function fetchCloud() {
   const res = await fetch(base + '/sync', { headers: { Authorization: 'Bearer ' + token } });
   if (!res.ok) throw new Error(`Gateway returned ${res.status}`);
   const etag = res.headers.get('ETag') || res.headers.get('etag') || '';
-  return { body: await res.json(), etag };
+  // A 0-byte ledger file (e.g. an interrupted write) comes back as 200 with an
+  // empty body — treat it as an empty cloud so the next push repopulates it.
+  const text = (await res.text()).trim();
+  if (!text) return { body: { empty: true }, etag };
+  try {
+    return { body: JSON.parse(text), etag };
+  } catch {
+    throw new Error('Cloud ledger is corrupt (invalid JSON) — restore from a backup in /backups');
+  }
 }
 
 // Write the merged ledger back, guarded by If-Match when the gateway supplied an

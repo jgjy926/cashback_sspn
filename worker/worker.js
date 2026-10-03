@@ -6,7 +6,7 @@
  *
  * Routes (all require `Authorization: Bearer <APP_TOKEN>` except OPTIONS):
  *   GET    /sync            -> read the ledger JSON
- *   PUT    /sync            -> write the ledger JSON (+ one dated backup per day)
+ *   PUT    /sync            -> write the ledger JSON atomically (+ one dated backup per day)
  *   GET    /receipt/:id     -> read a stored receipt image
  *   PUT    /receipt/:id     -> store a compressed receipt image (<= 1 MB)
  *   POST   /ocr             -> forward an image to OCR.space, return parsed text
@@ -59,44 +59,51 @@ async function handle(request, env) {
       if (!res.ok) return json({ error: `WebDAV read failed (${res.status})` }, res.status, env);
       // Surface the storage ETag so the client can do a conditional (If-Match) PUT.
       const etag = res.headers.get('ETag') || res.headers.get('etag') || '';
-      return new Response(await res.text(), { headers: cors(env, 'application/json', etag) });
+      const text = await res.text();
+      // A 0-byte file would otherwise reach the client as an empty 200 body.
+      if (!text.trim()) return new Response(JSON.stringify({ empty: true }), { headers: cors(env, 'application/json', etag) });
+      return new Response(text, { headers: cors(env, 'application/json', etag) });
     }
     if (request.method === 'PUT') {
       const payload = await request.text();
+      // Never let an empty or cut-off body replace the ledger. The client always
+      // sends one JSON object, so anything not shaped like {...} is rejected.
+      const trimmed = payload.trim();
+      if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+        return json({ error: 'Refusing to store an empty or incomplete ledger' }, 400, env);
+      }
       await mkcol(base, koofrAuth); // ensure the base folder exists (e.g. /Koofr/cashback_sspn)
 
-      // Optimistic concurrency: if the client sends the ETag it based its merge on,
-      // forward it as If-Match so the storage rejects a write built on a stale copy.
-      const ifMatch = request.headers.get('If-Match') || '';
-      const putHeaders = { Authorization: koofrAuth, 'Content-Type': 'application/json' };
-      if (ifMatch) putHeaders['If-Match'] = ifMatch;
-
-      const res = await fetch(ledgerUrl, { method: 'PUT', headers: putHeaders, body: payload });
-
-      // 412 Precondition Failed = another device wrote since the client's GET.
-      // Return 409 + the current ledger so the client re-merges and retries. (If the
-      // storage backend ignores If-Match this branch never fires and writes proceed
-      // unconditionally — the client-side merge still guarantees convergence.)
-      if (res.status === 412) {
+      // Optimistic concurrency: the client sends the ETag it based its merge on.
+      // Checked immediately before the swap, so a write built on a stale copy is
+      // rejected with 409 + the current ledger and the client re-merges and retries.
+      // (A write landing in the instant between this check and the MOVE is still
+      // safe: the merge on the next sync restores anything it overwrote.)
+      const ifMatch = normEtag(request.headers.get('If-Match'));
+      const conflictCheck = !ifMatch ? null : async () => {
         const cur = await fetch(ledgerUrl, { headers: { Authorization: koofrAuth } });
         const curEtag = cur.headers.get('ETag') || cur.headers.get('etag') || '';
-        const body = cur.ok ? await cur.text() : JSON.stringify({ conflict: true });
-        return new Response(body, { status: 409, headers: cors(env, 'application/json', curEtag) });
-      }
-      if (!res.ok) return json({ error: `WebDAV write failed (${res.status})` }, res.status, env);
+        if (cur.status === 404 || (cur.ok && normEtag(curEtag) && normEtag(curEtag) !== ifMatch)) {
+          const body = cur.ok ? await cur.text() : JSON.stringify({ conflict: true });
+          return new Response(body, { status: 409, headers: cors(env, 'application/json', curEtag) });
+        }
+        if (!cur.ok) return json({ error: `WebDAV read failed (${cur.status})` }, 502, env);
+        await cur.body?.cancel();
+        return null;
+      };
 
-      // one dated backup per day (idempotent within a day -> bounded Koofr growth)
+      const w = await atomicWrite(base, ledgerUrl, payload, koofrAuth, conflictCheck);
+      if (w.response) return w.response;
+      if (!w.ok) return json({ error: w.error }, 502, env);
+
+      // one dated backup per day (idempotent within a day -> bounded Koofr growth),
+      // written the same safe way so a failed backup never leaves a truncated file.
       const day = new Date().toISOString().slice(0, 10);
       const bakDir = `${base}/backups`;
       await mkcol(bakDir, koofrAuth);
-      await fetch(`${bakDir}/${ledgerFile}.${day}.bak`, {
-        method: 'PUT',
-        headers: { Authorization: koofrAuth, 'Content-Type': 'application/json' },
-        body: payload,
-      }).catch(() => {});
-      const newEtag = res.headers.get('ETag') || res.headers.get('etag') || '';
-      return new Response(JSON.stringify({ status: 'success', backup: `${day}` }),
-        { status: 200, headers: cors(env, 'application/json', newEtag) });
+      await atomicWrite(bakDir, `${bakDir}/${ledgerFile}.${day}.bak`, payload, koofrAuth).catch(() => {});
+      return new Response(JSON.stringify({ status: 'success', backup: `${day}`, atomic: w.atomic }),
+        { status: 200, headers: cors(env, 'application/json', w.etag) });
     }
     return json({ error: 'Method not allowed' }, 405, env);
   }
@@ -315,6 +322,58 @@ async function mkcol(dirUrl, auth) {
   try {
     await fetch(dirUrl, { method: 'MKCOL', headers: { Authorization: auth } });
   } catch { /* ignore — the subsequent PUT surfaces real errors */ }
+}
+
+// Crash-safe write. A plain WebDAV PUT truncates the target and then streams into
+// it, so an interrupted PUT leaves a 0-byte or half-written file. Instead: PUT to a
+// unique temp file beside the target, read it back to confirm every byte landed,
+// then MOVE it over the target in one server-side step — the target only ever holds
+// a complete old or complete new copy. `beforeSwap` may return a Response to abort
+// just before the swap (the ETag conflict check). The temp file is always removed.
+// Returns { ok, atomic, etag, error?, response? }.
+async function atomicWrite(dirUrl, targetUrl, body, auth, beforeSwap) {
+  const name = targetUrl.slice(targetUrl.lastIndexOf('/') + 1);
+  const tmpUrl = `${dirUrl}/${name}.${crypto.randomUUID()}.tmp`;   // unique: concurrent writers never share one
+  const headers = { Authorization: auth, 'Content-Type': 'application/json' };
+  let moved = false;
+  try {
+    const put = await fetch(tmpUrl, { method: 'PUT', headers, body });
+    if (!put.ok) return { ok: false, error: `WebDAV write failed (${put.status})` };
+
+    const check = await fetch(tmpUrl, { headers: { Authorization: auth } });
+    if (!check.ok || (await check.text()) !== body) {
+      return { ok: false, error: `WebDAV write could not be verified (${check.status})` };
+    }
+
+    if (beforeSwap) {
+      const abort = await beforeSwap();
+      if (abort) return { ok: false, response: abort };
+    }
+
+    const mv = await fetch(tmpUrl, {
+      method: 'MOVE',
+      headers: { Authorization: auth, Destination: targetUrl, Overwrite: 'T' },
+    });
+    if (mv.ok) {
+      moved = true;
+      return { ok: true, atomic: true, etag: mv.headers.get('ETag') || '' };
+    }
+    // Storage without MOVE support: fall back to the old direct PUT so sync keeps
+    // working instead of stalling. Every other MOVE failure leaves the target intact.
+    if (mv.status === 405 || mv.status === 501) {
+      const direct = await fetch(targetUrl, { method: 'PUT', headers, body });
+      if (!direct.ok) return { ok: false, error: `WebDAV write failed (${direct.status})` };
+      return { ok: true, atomic: false, etag: direct.headers.get('ETag') || '' };
+    }
+    return { ok: false, error: `WebDAV move failed (${mv.status})` };
+  } finally {
+    if (!moved) await fetch(tmpUrl, { method: 'DELETE', headers: { Authorization: auth } }).catch(() => {});
+  }
+}
+
+// Compare ETags by value: ignore the weak-validator prefix and surrounding quotes.
+function normEtag(e) {
+  return (e || '').replace(/^W\//, '').replace(/"/g, '').trim();
 }
 
 function safeEqual(a, b) {
