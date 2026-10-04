@@ -39,12 +39,105 @@ import { database } from './state.js';
             return `${cycleYear}-${mm}`;
         }
 
+        // The day-of-month the CASHBACK period ends on. Some cards cap cashback on a window
+        // that differs from the statement date (e.g. Muamalat EON: 16th -> 15th while the
+        // statement is cut on the 25th). cashbackCycleEndDay overrides billingDay for all
+        // cap / min-spend grouping; when unset, cashback follows the statement cycle.
+        function getCashbackCycleDay(card) {
+            if (!card) return 15;
+            if (card.cashbackCycleEndDay > 0) return card.cashbackCycleEndDay;
+            return card.billingDay || 15;
+        }
+
+        function localDateStr(d) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        // Inclusive start/end dates of a cycle key ("YYYY-MM") for a given end day. Mirrors
+        // getTransactionCycle: the cycle ends on endDay of its month (clamped to month length,
+        // since a day > endDay never exists then) and starts the day after the previous one ends.
+        function getCycleBounds(cycleKey, endDay) {
+            const [y, m] = cycleKey.split('-').map(Number);
+            const dim = (yy, mm) => new Date(yy, mm, 0).getDate(); // mm is 1-based here
+            const end = new Date(y, m - 1, Math.min(endDay, dim(y, m)));
+            const py = m === 1 ? y - 1 : y;
+            const pm = m === 1 ? 12 : m - 1;
+            const start = new Date(py, pm - 1, Math.min(endDay, dim(py, pm)) + 1);
+            return { start, end, startStr: localDateStr(start), endStr: localDateStr(end) };
+        }
+
+        // Snapshot of a card's CURRENT cashback period: what has been earned, what cap is left,
+        // and -- the part a bare "RM left" can't answer -- how much more qualifying spend it
+        // takes to max the period out (cashback left / rate, per rule, bounded by the card cap).
+        function getCurrentCycleStatus(card, simulatedTxs, now = new Date()) {
+            const endDay = getCashbackCycleDay(card);
+            const todayStr = localDateStr(now);
+            const cycleKey = getTransactionCycle(todayStr, endDay);
+            const bounds = getCycleBounds(cycleKey, endDay);
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const daysLeft = Math.round((bounds.end - today) / 86400000) + 1; // includes today
+
+            const txs = simulatedTxs.filter(t => t.cardId === card.id && t.cycleKey === cycleKey);
+            const spend = txs.reduce((s, t) => s + t.amount, 0);
+            const earned = txs.reduce((s, t) => s + t.calculatedCashback, 0);
+            const cardCap = card.cycleCashbackCap > 0 ? card.cycleCashbackCap : Infinity;
+            const cardCapLeft = Math.max(0, cardCap - earned);
+            const minSpend = card.cycleMinSpend || 0;
+            const minSpendLeft = Math.max(0, minSpend - spend);
+            const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+
+            const rules = (card.rules || []).map(r => {
+                const ruleTxs = txs.filter(t => t.category === r.category);
+                const ruleEarned = ruleTxs.reduce((s, t) => s + t.calculatedCashback, 0);
+                const ruleSpend = ruleTxs.reduce((s, t) => s + t.amount, 0);
+                let rate = r.rate || 0;
+                if (r.tiered && Array.isArray(r.tiers) && r.tiers.length > 0) {
+                    const tier = [...r.tiers].sort((a, b) => b.minSpend - a.minSpend).find(tr => spend >= tr.minSpend);
+                    if (tier) rate = tier.rate;
+                }
+                let active = true;
+                if (r.monthsOnly) {
+                    const months = r.monthsOnly.split(',').map(m => m.trim().padStart(2, '0'));
+                    active = months.includes(monthStr);
+                }
+                const catCapRaw = resolveCategoryCap(r, monthStr);
+                const catCap = catCapRaw > 0 ? catCapRaw : Infinity;
+                const catLeft = Math.max(0, catCap - ruleEarned);
+                const cbLeft = active ? Math.min(catLeft, cardCapLeft) : 0;
+                const spendLeft = rate > 0 ? cbLeft / rate : 0;
+                return { rule: r, category: r.category, rate, active, earned: ruleEarned, spend: ruleSpend, catCap, catLeft, cbLeft, spendLeft };
+            });
+
+            // Total qualifying spend left: fill the best-rate rules first, each limited by its
+            // own category headroom and by whatever card-level cap remains after the previous.
+            let capPool = cardCapLeft;
+            let totalSpendLeft = 0;
+            [...rules].filter(r => r.active && r.rate > 0).sort((a, b) => b.rate - a.rate).forEach(r => {
+                const take = Math.min(r.catLeft, capPool);
+                if (take === Infinity) { totalSpendLeft = Infinity; return; }
+                totalSpendLeft += take / r.rate;
+                capPool -= take;
+            });
+
+            const cbLeft = Math.min(cardCapLeft, rules.reduce((s, r) => s + r.cbLeft, 0));
+            const isMaxed = (cardCap !== Infinity && cardCapLeft <= 0.005) || (rules.length > 0 && totalSpendLeft <= 0.005);
+
+            return {
+                cycleKey, endDay, ...bounds, daysLeft,
+                spend, earned, cardCap, cardCapLeft, cbLeft,
+                minSpend, minSpendLeft,
+                totalSpendLeft,
+                dailyPace: totalSpendLeft !== Infinity && daysLeft > 0 ? totalSpendLeft / daysLeft : 0,
+                isMaxed, rules
+            };
+        }
+
         function evaluateCashbackSimulation() {
             const cardCycleSpendTotals = {};
 
             database.transactions.forEach(t => {
                 const card = database.cards.find(c => c.id === t.cardId);
-                const bDay = card ? card.billingDay : 15;
+                const bDay = getCashbackCycleDay(card);
                 const cycleKey = getTransactionCycle(t.date, bDay);
 
                 if (!cardCycleSpendTotals[cycleKey]) cardCycleSpendTotals[cycleKey] = {};
@@ -61,7 +154,7 @@ import { database } from './state.js';
 
             sortedTxs.forEach(t => {
                 const card = database.cards.find(c => c.id === t.cardId);
-                const bDay = card ? card.billingDay : 15;
+                const bDay = getCashbackCycleDay(card);
                 const cycleKey = getTransactionCycle(t.date, bDay);
                 
                 const totalCycleSpend = (cardCycleSpendTotals[cycleKey] && cardCycleSpendTotals[cycleKey][t.cardId]) || 0;
@@ -193,4 +286,4 @@ import { database } from './state.js';
             }));
         }
 
-export { getTransactionCycle, evaluateCashbackSimulation, resolveCategoryCap };
+export { getTransactionCycle, evaluateCashbackSimulation, resolveCategoryCap, getCashbackCycleDay, getCycleBounds, getCurrentCycleStatus };

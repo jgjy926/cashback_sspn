@@ -1,4 +1,4 @@
-import { evaluateCashbackSimulation, getTransactionCycle, resolveCategoryCap } from './calc.js';
+import { evaluateCashbackSimulation, getTransactionCycle, resolveCategoryCap, getCashbackCycleDay } from './calc.js';
 import { database } from './state.js';
 import { getNetworkIcon, getThemeStyles, showToast, switchTab } from './ui.js';
 
@@ -44,8 +44,8 @@ import { getNetworkIcon, getThemeStyles, showToast, switchTab } from './ui.js';
             const todayStr = `${now.getFullYear()}-${currentMonth}-${String(currentDayOfMonth).padStart(2, '0')}`;
 
             database.cards.forEach(c => {
-                const cycleKey = getTransactionCycle(todayStr, c.billingDay);
-                const cardTxs = simulatedTxs.filter(t => t.cardId === c.id && getTransactionCycle(t.date, c.billingDay) === cycleKey);
+                const cycleKey = getTransactionCycle(todayStr, getCashbackCycleDay(c));
+                const cardTxs = simulatedTxs.filter(t => t.cardId === c.id && t.cycleKey === cycleKey);
                 const accumCB = cardTxs.reduce((sum, t) => sum + t.calculatedCashback, 0);
                 const accumSpend = cardTxs.reduce((sum, t) => sum + t.amount, 0);
 

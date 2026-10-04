@@ -742,9 +742,16 @@
                                     <input type="number" step="1" id="editCardMinSpend" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500" placeholder="500">
                                 </div>
                             </div>
-                            <div>
-                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Overall Cycle Cap (RM)</label>
-                                <input type="number" step="1" id="editCardCashbackCap" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500" placeholder="100">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Overall Cycle Cap (RM)</label>
+                                    <input type="number" step="1" id="editCardCashbackCap" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500" placeholder="100">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Cashback Period Ends (Day)</label>
+                                    <input type="number" id="editCardCashbackCycleEndDay" min="1" max="31" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500" placeholder="Same as billing">
+                                    <p class="text-[9px] text-slate-500 mt-1">e.g. 15 for a 16th&ndash;15th cap period. Blank = follows billing day.</p>
+                                </div>
                             </div>
 
                             <!-- Cashback Rules Builder Area -->
@@ -1762,7 +1769,7 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.10.04-1';
+      window.APP_VERSION = '2026.10.04-2';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','merge','dashboard','dropdowns',

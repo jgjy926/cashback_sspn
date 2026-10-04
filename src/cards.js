@@ -27,7 +27,7 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
                             <td class="py-3 px-4 uppercase text-xs">
                                 <span class="px-2 py-0.5 rounded text-[10px] font-bold ${styles.badge}">${c.theme}</span>
                             </td>
-                            <td class="py-3 px-4 text-slate-400 font-semibold">Day ${c.billingDay}</td>
+                            <td class="py-3 px-4 text-slate-400 font-semibold">Day ${c.billingDay}${c.cashbackCycleEndDay > 0 && c.cashbackCycleEndDay !== c.billingDay ? `<span class="text-[9px] block font-semibold text-emerald-400">CB period ends day ${c.cashbackCycleEndDay}</span>` : ''}</td>
                             <td class="py-3 px-4 text-slate-400 font-mono">
                                 <span class="text-xs block font-bold text-slate-300">Min: ${minSpendText}</span>
                                 <span class="text-[9px] block font-semibold text-indigo-400">Cap: ${textCap}</span>
@@ -57,6 +57,7 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
             document.getElementById("editCardBillingDay").value = "1";
             document.getElementById("editCardMinSpend").value = "0";
             document.getElementById("editCardCashbackCap").value = "100";
+            document.getElementById("editCardCashbackCycleEndDay").value = "";
             document.getElementById("rulesListContainer").innerHTML = "";
             addRuleRow("Other Spending", 0.002, 0, false, [], 0, false, "", "", ["Other Spending"]);
         }
@@ -282,6 +283,7 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
             document.getElementById("editCardBillingDay").value = card.billingDay || 1;
             document.getElementById("editCardMinSpend").value = card.cycleMinSpend || 0;
             document.getElementById("editCardCashbackCap").value = card.cycleCashbackCap || 100;
+            document.getElementById("editCardCashbackCycleEndDay").value = card.cashbackCycleEndDay || "";
 
             const rulesContainer = document.getElementById("rulesListContainer");
             rulesContainer.innerHTML = "";
@@ -327,6 +329,8 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
             const billingDay = parseInt(document.getElementById("editCardBillingDay").value) || 1;
             const minSpend = parseFloat(document.getElementById("editCardMinSpend").value) || 0;
             const cbCap = parseFloat(document.getElementById("editCardCashbackCap").value) || 0;
+            const cbEndDayRaw = parseInt(document.getElementById("editCardCashbackCycleEndDay").value);
+            const cbEndDay = cbEndDayRaw >= 1 && cbEndDayRaw <= 31 ? cbEndDayRaw : 0;
 
             const rules = [];
             document.querySelectorAll(".rule-item-row").forEach(row => {
@@ -403,6 +407,8 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
                 existingCard.billingDay = billingDay;
                 existingCard.cycleMinSpend = minSpend;
                 existingCard.cycleCashbackCap = cbCap;
+                if (cbEndDay) existingCard.cashbackCycleEndDay = cbEndDay;
+                else delete existingCard.cashbackCycleEndDay;
                 existingCard.rules = rules;
                 showToast("Card settings updated.");
             } else {
@@ -416,6 +422,7 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
                     billingDay: billingDay,
                     cycleMinSpend: minSpend,
                     cycleCashbackCap: cbCap,
+                    ...(cbEndDay ? { cashbackCycleEndDay: cbEndDay } : {}),
                     rules: rules
                 });
                 showToast("New credit card configuration stored.");

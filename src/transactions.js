@@ -86,7 +86,7 @@ import { askConfirm, initDatePickers, showToast } from './ui.js';
                     const yieldAmt = amount * rate;
                     document.getElementById("cashbackPreviewRate").innerText = `${prefix}${(rate*100).toFixed(2)}% Rule`;
                     document.getElementById("cashbackPreviewVal").innerText = `RM ${yieldAmt.toFixed(2)}`;
-                    document.getElementById("cashbackPreviewCycleMsg").innerText = `Billing Cycle Day: ${card.billingDay} | Min Tx: RM ${rule.minTxSpend || 0}`;
+                    document.getElementById("cashbackPreviewCycleMsg").innerText = `Billing Cycle Day: ${card.billingDay}${card.cashbackCycleEndDay > 0 ? ` | Cashback Period Ends: Day ${card.cashbackCycleEndDay}` : ''} | Min Tx: RM ${rule.minTxSpend || 0}`;
                 }
             }
             updateQuickLogMerchantBadge();
