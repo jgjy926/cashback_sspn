@@ -18,6 +18,7 @@ import * as medical from './medical.js';
 import * as vehicle from './vehicle.js';
 import * as savings from './savings.js';
 import * as autosync from './autosync.js';
+import * as statement from './statement.js';
 import { loadFromLocalStorage } from './storage.js';
 import { initDatePickers } from './ui.js';
 import { populateDropdownOptions } from './dropdowns.js';
@@ -29,7 +30,7 @@ import { renderVehicle } from './vehicle.js';
 import { renderSavings } from './savings.js';
 import { initAutoSync } from './autosync.js';
 
-Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts, claims, medical, vehicle, savings, autosync);
+Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts, claims, medical, vehicle, savings, autosync, statement);
 
 window.addEventListener('load', () => {
   loadFromLocalStorage();

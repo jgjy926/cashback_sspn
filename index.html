@@ -235,6 +235,9 @@
                             <p class="text-[10px] text-slate-500 mt-0.5">Calculations based on real-time minimum spends and tiered constraints.</p>
                         </div>
                         <div class="flex gap-2 w-full sm:w-auto">
+                            <button onclick="openStatementImport()" title="Screenshot of your bank app -> any AI returns JSON -> review -> commit" class="bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-200 px-4 py-2 rounded-xl text-xs font-semibold tracking-wider transition flex items-center justify-center gap-1.5 w-full sm:w-auto">
+                                <i class="fa-solid fa-camera-retro"></i>Import Screenshot
+                            </button>
                             <button onclick="exportToExcel()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-semibold tracking-wider transition flex items-center justify-center gap-1.5 w-full sm:w-auto shadow-md">
                                 <i class="fa-solid fa-file-excel"></i>Excel Export
                             </button>
@@ -273,7 +276,8 @@
                         <i class="fa-solid fa-sliders text-xs"></i>
                     </button>
                 </div>
-                <p class="text-xs text-slate-500 mb-6">Optimized design for fast manual input on mobile and touchscreen devices.</p>
+                <p class="text-xs text-slate-500 mb-4">Optimized design for fast manual input on mobile and touchscreen devices.</p>
+                <button type="button" onclick="openStatementImport()" class="w-full mb-6 bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-200 font-bold py-2.5 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-camera-retro mr-1 text-indigo-400"></i>Import from bank-app screenshot (AI JSON)</button>
 
                 <form id="quickLogForm" onsubmit="handleTransactionSubmit(event)" class="space-y-4">
                     <div>
@@ -1758,12 +1762,12 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.09.19-1';
+      window.APP_VERSION = '2026.10.04-1';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','merge','dashboard','dropdowns',
           'ui','charts','calc','cards','optimizer','sspn','transactions',
-          'claims','medical','vehicle','savings','autosync','receipts','ocr','excel','main'];
+          'claims','medical','vehicle','savings','autosync','receipts','ocr','excel','enrich','statement','main'];
         var imports = {};
         mods.forEach(function (m) { imports['./src/' + m + '.js'] = './src/' + m + '.js?v=' + v; });
         var im = document.createElement('script');

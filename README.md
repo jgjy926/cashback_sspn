@@ -98,6 +98,17 @@ editable confirm form → `PUT /receipt/<id>` stores the image in Koofr `/receip
 ledger keeps only `{ merchant, date, total, …, imagePath }` (no image bytes). Optionally
 the receipt is also logged as a credit-card transaction.
 
+## Import transactions from a bank-app screenshot
+
+**Import Screenshot** (Processed Ledger header, or the button on Quick Log) opens a panel:
+pick the card → **Copy prompt** (it lists that card's cashback categories + merchant hints and
+the reply schema) → paste it into Claude / ChatGPT / Gemini with the screenshot(s) attached →
+paste the JSON reply back → **Parse**. Each row can be ticked and re-categorised before
+**Commit to ledger**. Credits (refunds, incoming transfers) and rows already in the ledger for
+that card (same date + amount) start unticked; unknown categories fall back to a merchant-list
+match, then the card's "other" rule. The parser tolerates code fences, `"- RM 1,122.00"`
+amounts and `04 OCT 2026` dates. Lives in `src/statement.js`.
+
 ## Vehicle & Transport
 
 Capture a workshop / petrol / road tax receipt in the **Receipts** tab and tick **Record into
