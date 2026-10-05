@@ -1,4 +1,4 @@
-import { evaluateCashbackSimulation, getCurrentCycleStatus } from './calc.js';
+import { evaluateCashbackSimulation, getCurrentCycleKey, getCycleStatus } from './calc.js';
 import { renderCardsVault } from './cards.js';
 import { renderCharts, renderSspnCharts } from './charts.js';
 import { populateFilterBanksAndYears } from './dropdowns.js';
@@ -241,82 +241,180 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
             renderInteractiveInspectorContent();
         }
 
-        /* Current cashback period ("how much can I still spend?") -- independent of the
-           calendar-month filters, because a 16th->15th period straddles two months. */
+        /* Cashback period inspector. A card's cap / min-spend run per cashback period, which
+           can straddle two calendar months (Muamalat EON: 16th -> 15th). The inspector therefore
+           reads the Year + Month filter as "the period that ENDS in that month": picking Oct
+           shows 16 Sep -> 15 Oct. With no specific month picked it shows the live period.
+           (The ledger, KPIs and charts keep plain calendar-month filtering.) */
 
         const fmtRM = v => v === Infinity ? 'Unlimited' : `RM ${v.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         const fmtDay = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+        const fmtPeriod = key => { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }); };
 
-        function periodVerdict(st) {
-            if (st.minSpendLeft > 0) return { cls: 'text-amber-400', text: `Spend ${fmtRM(st.minSpendLeft)} more to unlock cashback` };
-            if (st.isMaxed) return { cls: 'text-rose-400', text: 'Maxed out — switch card until next period' };
-            return { cls: 'text-emerald-400', text: 'Under cap — keep using this card' };
+        // The cycle key picked by the filters, or null when Year/Month is "ALL".
+        function selectedPeriodKey() {
+            const y = document.getElementById("filterYear").value;
+            const m = document.getElementById("filterMonth").value;
+            return y !== "ALL" && m !== "ALL" ? `${y}-${m}` : null;
         }
 
-        function renderCurrentPeriodBlock(card, st) {
-            const capPct = st.cardCap !== Infinity && st.cardCap > 0 ? Math.min((st.earned / st.cardCap) * 100, 100) : 0;
+        function cardPeriodStatus(card, simulatedTxs) {
+            const key = selectedPeriodKey() || getCurrentCycleKey(card);
+            return getCycleStatus(card, simulatedTxs, key);
+        }
+
+        function jumpToCyclePeriod(key) {
+            const [y, m] = key.split('-');
+            const yearSel = document.getElementById("filterYear");
+            if (![...yearSel.options].some(o => o.value === y)) yearSel.add(new Option(y, y));
+            yearSel.value = y;
+            document.getElementById("filterMonth").value = m;
+            refreshLedgerAndCalculations();
+        }
+
+        function periodVerdict(st) {
+            const tone = {
+                slate: 'bg-slate-500/10 text-slate-400 border border-slate-500/20',
+                amber: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
+                rose: 'bg-rose-500/10 text-rose-400 border border-rose-500/20',
+                emerald: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+            };
+            const unused = fmtRM(st.cbLeft === Infinity ? st.cardCapLeft : st.cbLeft);
+            if (st.phase === 'future') return { cls: 'text-slate-400', badge: tone.slate, label: 'Upcoming', text: 'Period has not started yet' };
+            if (st.minSpendLeft > 0) return st.phase === 'past'
+                ? { cls: 'text-amber-400', badge: tone.amber, label: 'Min Spend Missed', text: `Closed ${fmtRM(st.minSpendLeft)} short of the minimum spend` }
+                : { cls: 'text-amber-400', badge: tone.amber, label: 'Locked (Under Minimum)', text: `Spend ${fmtRM(st.minSpendLeft)} more to unlock cashback` };
+            if (st.isMaxed) return { cls: 'text-rose-400', badge: tone.rose, label: 'Maxed Out', text: st.phase === 'past' ? 'Cap fully used this period' : 'Maxed out — switch card until next period' };
+            return st.phase === 'past'
+                ? { cls: 'text-slate-400', badge: tone.slate, label: 'Closed', text: `Period closed with ${unused} of cap unused` }
+                : { cls: 'text-emerald-400', badge: tone.emerald, label: 'Sweet Spot', text: 'Under cap — keep using this card' };
+        }
+
+        function phaseText(st) {
+            if (st.phase === 'current') return `<b class="text-slate-200">${st.daysLeft} day${st.daysLeft === 1 ? '' : 's'} left</b>`;
+            return st.phase === 'past' ? '<b class="text-slate-500">Closed</b>' : '<b class="text-slate-400">Upcoming</b>';
+        }
+
+        function ruleRestrictions(r) {
+            const out = [];
+            if (r.weekendOnly) out.push("Weekends");
+            if (r.daysOnly) out.push(`Days: ${r.daysOnly}`);
+            if (r.monthsOnly) out.push(`Months: ${r.monthsOnly}`);
+            if (Array.isArray(r.capOverrides)) {
+                r.capOverrides.forEach(ov => { if (ov && ov.months && ov.cap > 0) out.push(`Cap RM${ov.cap} in ${ov.months}`); });
+            }
+            return out;
+        }
+
+        function renderPeriodPanel(card, st) {
+            const live = st.phase === 'current';
             const verdict = periodVerdict(st);
             const cbLeft = st.cbLeft === Infinity ? st.cardCapLeft : st.cbLeft;
-            const showRules = st.rules.length > 1 || st.rules.some(r => r.catCap !== Infinity);
-            const ruleRows = showRules ? st.rules.map(r => `
-                <div class="flex justify-between gap-2 text-[10px] font-mono ${r.active ? 'text-slate-300' : 'text-slate-600 line-through'}">
-                    <span class="font-sans">${r.category} <span class="text-slate-500">(${(r.rate * 100).toFixed(1)}%)</span></span>
-                    <span>${r.active ? `${fmtRM(r.spendLeft)} spend · ${fmtRM(r.cbLeft)} CB` : 'not active this month'}</span>
-                </div>`).join('') : '';
+            const capPct = st.cardCap !== Infinity && st.cardCap > 0 ? Math.min((st.earned / st.cardCap) * 100, 100) : 0;
+            const spendPct = st.minSpend > 0 ? Math.min((st.spend / st.minSpend) * 100, 100) : 100;
+
+            const liveKey = getCurrentCycleKey(card);
+            const note = !selectedPeriodKey()
+                ? `<p class="text-[9px] text-slate-500">No specific month selected — showing the live period.</p>`
+                : liveKey !== st.cycleKey
+                    ? `<p class="text-[9px] text-slate-500">Live period is ${fmtPeriod(liveKey)}. <button onclick="jumpToCyclePeriod('${liveKey}')" class="text-indigo-400 hover:text-indigo-300 font-semibold underline">View live quota</button></p>`
+                    : '';
+
+            const catHTML = st.rules.map(r => {
+                const restrictions = ruleRestrictions(r.rule);
+                const badge = restrictions.length ? `<span class="bg-indigo-950 text-indigo-400 text-[8px] px-1.5 py-0.2 rounded font-bold">${restrictions.join(" | ")}</span>` : "";
+                const pct = r.catCap !== Infinity ? Math.min((r.earned / r.catCap) * 100, 100) : 100;
+                const headroom = !r.active
+                    ? '<span class="text-slate-600">not active this month</span>'
+                    : live ? `${fmtRM(r.spendLeft)} spend · ${fmtRM(r.cbLeft)} CB left` : '';
+                return `
+                    <div class="space-y-1 bg-gray-950/40 p-3 rounded-lg border border-gray-800/40 font-mono ${r.active ? '' : 'opacity-60'}">
+                        <div class="flex justify-between gap-2 text-[10px] text-slate-300 font-semibold font-sans">
+                            <span>${r.category} <span class="text-slate-500 font-normal">(${(r.rate * 100).toFixed(1)}%)</span> ${badge}</span>
+                            <span class="whitespace-nowrap">RM ${r.earned.toFixed(2)} / ${r.catCap !== Infinity ? 'RM ' + r.catCap.toFixed(0) : 'No Limit'}</span>
+                        </div>
+                        <div class="w-full bg-gray-950 h-1.5 rounded-full overflow-hidden border border-gray-900">
+                            <div class="bg-violet-500 h-full rounded-full transition-all" style="width: ${pct}%"></div>
+                        </div>
+                        <div class="flex justify-between gap-2 text-[9px] text-slate-500 font-sans">
+                            <span>${r.rule.merchants ? `<i class="fa-solid fa-store text-indigo-400"></i> ${r.rule.merchants}` : `Spent RM ${r.spend.toFixed(2)}`}</span>
+                            <span class="font-mono text-slate-400 whitespace-nowrap">${headroom}</span>
+                        </div>
+                    </div>`;
+            }).join('');
+
+            const stat = (label, value, cls) => `
+                <div>
+                    <span class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">${label}</span>
+                    <h2 class="text-lg font-bold font-mono ${cls}">${value}</h2>
+                </div>`;
 
             return `
                 <div class="bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/25 space-y-3">
                     <div class="flex flex-wrap justify-between items-center gap-2">
-                        <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-300"><i class="fa-solid fa-calendar-day"></i> Current Cashback Period</span>
-                        <span class="text-[10px] font-mono text-slate-400">${fmtDay(st.start)} → ${fmtDay(st.end)} · <b class="text-slate-200">${st.daysLeft} day${st.daysLeft === 1 ? '' : 's'} left</b></span>
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-300"><i class="fa-solid fa-calendar-day"></i> Cashback Period · ${fmtPeriod(st.cycleKey)}</span>
+                        <span class="text-[10px] font-mono text-slate-400">${fmtDay(st.start)} → ${fmtDay(st.end)} · ${phaseText(st)}</span>
                     </div>
+                    ${note}
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div>
-                            <span class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Spend Left to Max</span>
-                            <h2 class="text-lg font-bold text-indigo-300 font-mono">${st.isMaxed ? 'RM 0.00' : fmtRM(st.totalSpendLeft)}</h2>
+                        ${stat('Spend Left to Max', live ? (st.isMaxed ? 'RM 0.00' : fmtRM(st.totalSpendLeft)) : '—', 'text-indigo-300')}
+                        ${stat(live ? 'Cashback Left' : 'Cap Unused', fmtRM(cbLeft), 'text-emerald-400')}
+                        ${stat('Earned / Cap', `RM ${st.earned.toFixed(2)}<span class="text-[10px] text-slate-500"> / ${st.cardCap === Infinity ? '∞' : 'RM ' + st.cardCap.toFixed(0)}</span>`, 'text-slate-100')}
+                        ${stat('Daily Pace', live && !st.isMaxed && st.totalSpendLeft !== Infinity ? fmtRM(st.dailyPace) + '<span class="text-[10px] text-slate-500">/day</span>' : '—', 'text-violet-400')}
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono">
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] text-slate-400 font-semibold">
+                                <span>Min Spend</span>
+                                <span>RM ${st.spend.toFixed(2)} / ${st.minSpend > 0 ? 'RM ' + st.minSpend.toFixed(0) : 'None'}</span>
+                            </div>
+                            <div class="w-full bg-gray-900 h-2 rounded-full overflow-hidden">
+                                <div class="bg-indigo-500 h-full rounded-full transition-all" style="width: ${spendPct}%"></div>
+                            </div>
                         </div>
-                        <div>
-                            <span class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Cashback Left</span>
-                            <h2 class="text-lg font-bold text-emerald-400 font-mono">${fmtRM(cbLeft)}</h2>
-                        </div>
-                        <div>
-                            <span class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Earned / Cap</span>
-                            <h2 class="text-lg font-bold text-slate-100 font-mono">RM ${st.earned.toFixed(2)}<span class="text-[10px] text-slate-500"> / ${st.cardCap === Infinity ? '∞' : 'RM ' + st.cardCap.toFixed(0)}</span></h2>
-                        </div>
-                        <div>
-                            <span class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Daily Pace</span>
-                            <h2 class="text-lg font-bold text-violet-400 font-mono">${st.isMaxed || st.totalSpendLeft === Infinity ? '—' : fmtRM(st.dailyPace) + '<span class="text-[10px] text-slate-500">/day</span>'}</h2>
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-[10px] text-slate-400 font-semibold">
+                                <span>Cashback Cap</span>
+                                <span>RM ${st.earned.toFixed(2)} / ${st.cardCap !== Infinity ? 'RM ' + st.cardCap.toFixed(0) : 'Unlimited'}</span>
+                            </div>
+                            <div class="w-full bg-gray-900 h-2 rounded-full overflow-hidden">
+                                <div class="bg-emerald-500 h-full rounded-full transition-all" style="width: ${capPct}%"></div>
+                            </div>
                         </div>
                     </div>
-                    <div class="w-full bg-gray-900 h-2 rounded-full overflow-hidden">
-                        <div class="bg-emerald-500 h-full rounded-full transition-all" style="width: ${capPct}%"></div>
-                    </div>
-                    ${ruleRows ? `<div class="space-y-1 pt-1 border-t border-gray-800/60">${ruleRows}</div>` : ''}
                     <p class="text-[10px] font-semibold ${verdict.cls}">${verdict.text} <span class="text-slate-500 font-normal">· spent RM ${st.spend.toFixed(2)} this period</span></p>
+                    <div class="space-y-2 pt-2 border-t border-gray-800/60">
+                        <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold block font-sans">Category Breakdown</span>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[220px] overflow-y-auto pr-1">
+                            ${catHTML}
+                        </div>
+                    </div>
                 </div>
             `;
         }
 
-        function renderPeriodQuotaTable(simulatedTxs) {
-            const rows = database.cards.map(c => {
-                const st = getCurrentCycleStatus(c, simulatedTxs);
+        function renderPeriodQuotaTable(statuses) {
+            const key = selectedPeriodKey();
+            const rows = statuses.map(({ card: c, st }) => {
                 const verdict = periodVerdict(st);
                 const cbLeft = st.cbLeft === Infinity ? st.cardCapLeft : st.cbLeft;
+                const spendCell = st.phase !== 'current' ? verdict.label : st.minSpendLeft > 0 ? 'Locked' : st.isMaxed ? 'Maxed' : fmtRM(st.totalSpendLeft);
                 return `
                     <tr class="border-b border-gray-900 text-[10px]">
                         <td class="py-2 pr-2 font-semibold text-slate-200 cursor-pointer hover:text-indigo-300" onclick="loadCardInteractiveMeter('${c.id}')">${c.name}</td>
-                        <td class="py-2 pr-2 font-mono text-slate-400 whitespace-nowrap">${fmtDay(st.start)}–${fmtDay(st.end)} <span class="text-slate-500">(${st.daysLeft}d)</span></td>
+                        <td class="py-2 pr-2 font-mono text-slate-400 whitespace-nowrap">${fmtDay(st.start)}–${fmtDay(st.end)} <span class="text-slate-500">(${st.phase === 'current' ? st.daysLeft + 'd' : st.phase})</span></td>
+                        <td class="py-2 pr-2 font-mono text-slate-300 text-right whitespace-nowrap">RM ${st.earned.toFixed(2)}</td>
                         <td class="py-2 pr-2 font-mono text-emerald-400 text-right whitespace-nowrap">${fmtRM(cbLeft)}</td>
-                        <td class="py-2 font-mono font-bold text-right whitespace-nowrap ${verdict.cls}">${st.minSpendLeft > 0 ? 'Locked' : st.isMaxed ? 'Maxed' : fmtRM(st.totalSpendLeft)}</td>
+                        <td class="py-2 font-mono font-bold text-right whitespace-nowrap ${verdict.cls}">${spendCell}</td>
                     </tr>`;
             }).join('');
             return `
                 <div class="bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/25 space-y-2">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-300"><i class="fa-solid fa-calendar-day"></i> Current Cashback Period — Quota Left</span>
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-300"><i class="fa-solid fa-calendar-day"></i> Cashback Period — ${key ? `Ending ${fmtPeriod(key)}` : 'Live'}</span>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead><tr class="text-[8px] uppercase tracking-widest text-slate-500">
-                                <th class="pb-1 pr-2">Card</th><th class="pb-1 pr-2">Period</th><th class="pb-1 pr-2 text-right">CB Left</th><th class="pb-1 text-right">Spend Left</th>
+                                <th class="pb-1 pr-2">Card</th><th class="pb-1 pr-2">Period</th><th class="pb-1 pr-2 text-right">Earned</th><th class="pb-1 pr-2 text-right">CB Left</th><th class="pb-1 text-right">Spend Left</th>
                             </tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
@@ -329,69 +427,22 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
             const inspector = document.getElementById("interactiveInspectorContent");
             if (!inspector) return;
 
-            const selectedYear = document.getElementById("filterYear").value;
-            const selectedMonth = document.getElementById("filterMonth").value;
             const simulatedTxs = evaluateCashbackSimulation();
-
-            const filterLabel = (selectedMonth !== "ALL" ? selectedMonth : "All Months") + " " + (selectedYear !== "ALL" ? selectedYear : "All Years");
+            const periodKey = selectedPeriodKey();
+            const filterLabel = periodKey ? `Period ending ${fmtPeriod(periodKey)}` : 'Live period';
 
             if (currentInteractiveCardId === "ALL") {
                 // RENDER: High-Level Unified Multi-Card Summary ("ALL STACK" Inspector Behavior)
-                let totalConsolidatedSpend = 0;
-                let totalConsolidatedCashback = 0;
-                let totalRemainingCashbackQuota = 0;
+                const selectedBank = document.getElementById("filterBank").value;
+                const statuses = database.cards
+                    .filter(c => selectedBank === "ALL" || c.bank === selectedBank)
+                    .map(c => ({ card: c, st: cardPeriodStatus(c, simulatedTxs) }));
 
-                database.cards.forEach(c => {
-                    const cardTxs = simulatedTxs.filter(t => {
-                        const cardMatch = t.cardId === c.id;
-                        const txYear = t.date.substring(0, 4);
-                        const txMonth = t.date.substring(5, 7);
-                        const yearMatch = (selectedYear === "ALL" || txYear === selectedYear);
-                        const monthMatch = (selectedMonth === "ALL" || txMonth === selectedMonth);
-                        return cardMatch && yearMatch && monthMatch;
-                    });
-
-                    const totalSpendOnCard = cardTxs.reduce((sum, t) => sum + t.amount, 0);
-                    const totalCBOnCard = cardTxs.reduce((sum, t) => sum + t.calculatedCashback, 0);
-                    totalConsolidatedSpend += totalSpendOnCard;
-                    totalConsolidatedCashback += totalCBOnCard;
-
-                    // World-Class QA Audit calculation: Calculate remaining available quota on a PER-RULE breakdown first, then overall card cap
-                    let sumOfRemainingCategoryQuota = 0;
-                    let hasUnlimitedCategory = false;
-
-                    c.rules.forEach(r => {
-                        const catTxs = cardTxs.filter(t => t.category === r.category);
-                        const catCB = catTxs.reduce((sum, t) => sum + t.calculatedCashback, 0);
-                        
-                        if (r.categoryCap && r.categoryCap > 0) {
-                            sumOfRemainingCategoryQuota += Math.max(0, r.categoryCap - catCB);
-                        } else {
-                            hasUnlimitedCategory = true;
-                        }
-                    });
-
-                    const limitCap = c.cycleCashbackCap || Infinity;
-                    const remainingCardOverall = limitCap !== Infinity ? Math.max(0, limitCap - totalCBOnCard) : Infinity;
-
-                    let cardRemainingAllowed = 0;
-                    if (hasUnlimitedCategory) {
-                        cardRemainingAllowed = remainingCardOverall;
-                    } else {
-                        cardRemainingAllowed = Math.min(sumOfRemainingCategoryQuota, remainingCardOverall);
-                    }
-
-                    if (cardRemainingAllowed !== Infinity) {
-                        totalRemainingCashbackQuota += cardRemainingAllowed;
-                    } else {
-                        totalRemainingCashbackQuota += 99999; 
-                    }
-                });
-
+                const totalConsolidatedSpend = statuses.reduce((s, x) => s + x.st.spend, 0);
+                const totalConsolidatedCashback = statuses.reduce((s, x) => s + x.st.earned, 0);
+                const totalRemainingCashbackQuota = statuses.reduce((s, x) => s + (x.st.cbLeft === Infinity ? x.st.cardCapLeft : x.st.cbLeft), 0);
                 const averageYield = totalConsolidatedSpend > 0 ? (totalConsolidatedCashback / totalConsolidatedSpend) * 100 : 0;
-                const remainingQuotaText = totalRemainingCashbackQuota >= 99999 
-                    ? "Unlimited / Infinite" 
-                    : `RM ${totalRemainingCashbackQuota.toFixed(2)}`;
+                const remainingQuotaText = totalRemainingCashbackQuota === Infinity ? "Unlimited / Infinite" : fmtRM(totalRemainingCashbackQuota);
 
                 inspector.innerHTML = `
                     <div class="space-y-4">
@@ -401,19 +452,19 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                                     <i class="fa-solid fa-layer-group text-sm"></i>
                                     <span>Consolidated "All Stack" Summary</span>
                                 </h4>
-                                <span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">Active Filters: ${filterLabel}</span>
+                                <span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">${filterLabel} · each card on its own cashback period</span>
                             </div>
                             <span class="text-[9px] font-black uppercase px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">Audit Standard: Per-Rule Cap Summed</span>
                         </div>
 
-                        ${renderPeriodQuotaTable(simulatedTxs)}
+                        ${renderPeriodQuotaTable(statuses)}
 
                         <!-- Consolidated Metrics Grid -->
                         <div class="grid grid-cols-2 gap-4">
                             <div class="bg-gray-950/60 p-4 rounded-xl border border-gray-800/80 space-y-1">
                                 <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Total Spend</span>
                                 <h2 class="text-xl font-bold text-slate-100 font-mono">RM ${totalConsolidatedSpend.toFixed(2)}</h2>
-                                <p class="text-[8px] text-slate-500">Combined ledger volumes</p>
+                                <p class="text-[8px] text-slate-500">Combined period volumes</p>
                             </div>
                             <div class="bg-gray-950/60 p-4 rounded-xl border border-gray-800/80 space-y-1">
                                 <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Total Cash Back</span>
@@ -447,73 +498,8 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                 return;
             }
 
-            const cardTxs = simulatedTxs.filter(t => {
-                const cardMatch = t.cardId === card.id;
-                const txYear = t.date.substring(0, 4);
-                const txMonth = t.date.substring(5, 7);
-                const yearMatch = (selectedYear === "ALL" || txYear === selectedYear);
-                const monthMatch = (selectedMonth === "ALL" || txMonth === selectedMonth);
-                return cardMatch && yearMatch && monthMatch;
-            });
-
-            const totalSpend = cardTxs.reduce((sum, t) => sum + t.amount, 0);
-            const totalCB = cardTxs.reduce((sum, t) => sum + t.calculatedCashback, 0);
-            const minReq = card.cycleMinSpend || 0;
-            const limitCap = card.cycleCashbackCap || Infinity;
-
-            const spendPercent = minReq > 0 ? Math.min((totalSpend / minReq) * 100, 100) : 100;
-            const capPercent = limitCap !== Infinity ? Math.min((totalCB / limitCap) * 100, 100) : 0;
-            const hasUnlocked = totalSpend >= minReq;
-
-            // Gauge Status Flag
-            let rangeStatusClass = "bg-amber-500/10 text-amber-400 border border-amber-500/20";
-            let rangeStatusText = "Locked Range (Under Minimum)";
-            let rangeSuggestion = `Spend RM ${(minReq - totalSpend).toFixed(2)} more to unlock premium yields.`;
-
-            if (hasUnlocked) {
-                if (limitCap !== Infinity && totalCB >= limitCap) {
-                    rangeStatusClass = "bg-rose-500/10 text-rose-400 border border-rose-500/20 animate-pulse";
-                    rangeStatusText = "Maxed Out (Capped Yields)";
-                    rangeSuggestion = "⚠️ Maximum monthly cashback cap has been reached. Swap to another card immediately.";
-                } else {
-                    rangeStatusClass = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
-                    rangeStatusText = "Optimized Range (Sweet Spot)";
-                    rangeSuggestion = limitCap !== Infinity 
-                        ? `Yield active. RM ${(limitCap - totalCB).toFixed(2)} of the cap is unused within the filtered dates — see Current Cashback Period above for the live quota.`
-                        : "Yield active with unlimited cashback yield available!";
-                }
-            }
-
-            // Category Limit Items
-            let catHTML = "";
-            card.rules.forEach(r => {
-                const catTxs = cardTxs.filter(t => t.category === r.category);
-                const catCB = catTxs.reduce((sum, t) => sum + t.calculatedCashback, 0);
-                let ruleSpec = r.categoryCap > 0 ? `Limit: RM ${r.categoryCap}` : "No Limit";
-                let percent = r.categoryCap > 0 ? Math.min((catCB / r.categoryCap) * 100, 100) : 100;
-                
-                let restrictions = [];
-                if (r.weekendOnly) restrictions.push("Weekends");
-                if (r.daysOnly) restrictions.push(`Days: ${r.daysOnly}`);
-                if (r.monthsOnly) restrictions.push(`Months: ${r.monthsOnly}`);
-                if (Array.isArray(r.capOverrides)) {
-                    r.capOverrides.forEach(ov => { if (ov && ov.months && ov.cap > 0) restrictions.push(`Cap RM${ov.cap} in ${ov.months}`); });
-                }
-                const restrictBadge = restrictions.length > 0 ? `<span class="bg-indigo-950 text-indigo-400 text-[8px] px-1.5 py-0.2 rounded font-bold">${restrictions.join(" | ")}</span>` : "";
-
-                catHTML += `
-                    <div class="space-y-1 bg-gray-950/40 p-3 rounded-lg border border-gray-800/40 font-mono">
-                        <div class="flex justify-between text-[10px] text-slate-300 font-semibold font-sans">
-                            <span>${r.category} ${restrictBadge}</span>
-                            <span>RM ${catCB.toFixed(2)} / ${ruleSpec}</span>
-                        </div>
-                        <div class="w-full bg-gray-950 h-1.5 rounded-full overflow-hidden border border-gray-900">
-                            <div class="bg-violet-500 h-full rounded-full transition-all" style="width: ${percent}%"></div>
-                        </div>
-                        ${r.merchants ? `<div class="text-[9px] text-slate-500 flex items-center gap-1 mt-1 font-sans"><i class="fa-solid fa-store text-indigo-400"></i> ${r.merchants}</div>` : ""}
-                    </div>
-                `;
-            });
+            const st = cardPeriodStatus(card, simulatedTxs);
+            const verdict = periodVerdict(st);
 
             inspector.innerHTML = `
                 <div class="space-y-4 font-sans">
@@ -525,50 +511,10 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                             </h4>
                             <span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">${card.bank || 'CC'} •••• ${card.last4 || 'XXXX'} | Billing Day ${card.billingDay}${card.cashbackCycleEndDay > 0 && card.cashbackCycleEndDay !== card.billingDay ? ` | CB Period Ends Day ${card.cashbackCycleEndDay}` : ''}</span>
                         </div>
-                        <span class="text-[9px] font-black uppercase px-2.5 py-1 rounded-md ${rangeStatusClass}">${rangeStatusText}</span>
+                        <span class="text-[9px] font-black uppercase px-2.5 py-1 rounded-md ${verdict.badge}">${verdict.label}</span>
                     </div>
 
-                    ${renderCurrentPeriodBlock(card, getCurrentCycleStatus(card, simulatedTxs))}
-
-                    <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold block font-sans">Filtered View: ${filterLabel}</span>
-
-                    <!-- Meters Grid -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 font-sans">
-                        <div class="bg-gray-950/60 p-3 rounded-xl border border-gray-800/80 space-y-2">
-                            <div class="flex justify-between text-[10px] text-slate-400 font-semibold font-mono">
-                                <span>Cycle Spending Requirement</span>
-                                <span>RM ${totalSpend.toFixed(2)} / ${minReq > 0 ? 'RM ' + minReq.toFixed(0) : 'None'}</span>
-                            </div>
-                            <div class="w-full bg-gray-900 h-2.5 rounded-full overflow-hidden">
-                                <div class="bg-indigo-500 h-full rounded-full transition-all" style="width: ${spendPercent}%"></div>
-                            </div>
-                        </div>
-
-                        <div class="bg-gray-950/60 p-3 rounded-xl border border-gray-800/80 space-y-2">
-                            <div class="flex justify-between text-[10px] text-slate-400 font-semibold font-mono">
-                                <span>Overall Cashback Cap Quota</span>
-                                <span>RM ${totalCB.toFixed(2)} / ${limitCap !== Infinity ? 'RM ' + limitCap.toFixed(0) : 'Unlimited'}</span>
-                            </div>
-                            <div class="w-full bg-gray-900 h-2.5 rounded-full overflow-hidden">
-                                <div class="bg-emerald-500 h-full rounded-full transition-all" style="width: ${limitCap !== Infinity ? capPercent : 0}%"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="p-3 bg-gray-950 border border-gray-800 rounded-xl">
-                        <p class="text-[10px] text-slate-300 italic flex items-center gap-1.5 leading-relaxed font-sans">
-                            <i class="fa-solid fa-lightbulb text-amber-400"></i>
-                            ${rangeSuggestion}
-                        </p>
-                    </div>
-
-                    <!-- Category cap breaks -->
-                    <div class="space-y-2">
-                        <span class="text-[8px] uppercase tracking-widest text-slate-500 font-bold block font-sans">Internal Category Limit Breakdown</span>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[160px] overflow-y-auto pr-1">
-                            ${catHTML}
-                        </div>
-                    </div>
+                    ${renderPeriodPanel(card, st)}
                 </div>
             `;
         }
@@ -592,4 +538,4 @@ function applyCurrentMonthDefaults() {
     });
 }
 
-export { refreshLedgerAndCalculations, renderFilterDecks, setCardFilter, loadCardInteractiveMeter, renderInteractiveSelectorDeck, renderInteractiveInspectorContent, applyCurrentMonthDefaults };
+export { refreshLedgerAndCalculations, renderFilterDecks, setCardFilter, loadCardInteractiveMeter, renderInteractiveSelectorDeck, renderInteractiveInspectorContent, applyCurrentMonthDefaults, jumpToCyclePeriod };

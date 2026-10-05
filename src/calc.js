@@ -66,16 +66,21 @@ import { database } from './state.js';
             return { start, end, startStr: localDateStr(start), endStr: localDateStr(end) };
         }
 
-        // Snapshot of a card's CURRENT cashback period: what has been earned, what cap is left,
-        // and -- the part a bare "RM left" can't answer -- how much more qualifying spend it
-        // takes to max the period out (cashback left / rate, per rule, bounded by the card cap).
-        function getCurrentCycleStatus(card, simulatedTxs, now = new Date()) {
+        // Snapshot of one cashback period of a card (cycleKey = the month the period ENDS in,
+        // e.g. "2026-10" for 16 Sep -> 15 Oct): what has been earned, what cap is left, and --
+        // the part a bare "RM left" can't answer -- how much more qualifying spend it takes to
+        // max the period out (cashback left / rate, per rule, bounded by the card cap).
+        // phase is 'current' | 'past' | 'future' relative to `now`; headroom on a past period
+        // is reported but can no longer be used.
+        function getCycleStatus(card, simulatedTxs, cycleKey, now = new Date()) {
             const endDay = getCashbackCycleDay(card);
-            const todayStr = localDateStr(now);
-            const cycleKey = getTransactionCycle(todayStr, endDay);
             const bounds = getCycleBounds(cycleKey, endDay);
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const daysLeft = Math.round((bounds.end - today) / 86400000) + 1; // includes today
+            const phase = today > bounds.end ? 'past' : today < bounds.start ? 'future' : 'current';
+            const daysTotal = Math.round((bounds.end - bounds.start) / 86400000) + 1;
+            const daysLeft = phase === 'past' ? 0
+                : phase === 'future' ? daysTotal
+                : Math.round((bounds.end - today) / 86400000) + 1; // includes today
 
             const txs = simulatedTxs.filter(t => t.cardId === card.id && t.cycleKey === cycleKey);
             const spend = txs.reduce((s, t) => s + t.amount, 0);
@@ -84,7 +89,9 @@ import { database } from './state.js';
             const cardCapLeft = Math.max(0, cardCap - earned);
             const minSpend = card.cycleMinSpend || 0;
             const minSpendLeft = Math.max(0, minSpend - spend);
-            const monthStr = String(now.getMonth() + 1).padStart(2, '0');
+            // Month used for monthsOnly / capOverrides: today's while the period is live (that is
+            // the month new spend would land in), otherwise the period's end month.
+            const monthStr = phase === 'current' ? String(now.getMonth() + 1).padStart(2, '0') : cycleKey.slice(5, 7);
 
             const rules = (card.rules || []).map(r => {
                 const ruleTxs = txs.filter(t => t.category === r.category);
@@ -123,13 +130,21 @@ import { database } from './state.js';
             const isMaxed = (cardCap !== Infinity && cardCapLeft <= 0.005) || (rules.length > 0 && totalSpendLeft <= 0.005);
 
             return {
-                cycleKey, endDay, ...bounds, daysLeft,
+                cycleKey, endDay, ...bounds, phase, daysTotal, daysLeft,
                 spend, earned, cardCap, cardCapLeft, cbLeft,
                 minSpend, minSpendLeft,
                 totalSpendLeft,
                 dailyPace: totalSpendLeft !== Infinity && daysLeft > 0 ? totalSpendLeft / daysLeft : 0,
                 isMaxed, rules
             };
+        }
+
+        function getCurrentCycleKey(card, now = new Date()) {
+            return getTransactionCycle(localDateStr(now), getCashbackCycleDay(card));
+        }
+
+        function getCurrentCycleStatus(card, simulatedTxs, now = new Date()) {
+            return getCycleStatus(card, simulatedTxs, getCurrentCycleKey(card, now), now);
         }
 
         function evaluateCashbackSimulation() {
@@ -286,4 +301,4 @@ import { database } from './state.js';
             }));
         }
 
-export { getTransactionCycle, evaluateCashbackSimulation, resolveCategoryCap, getCashbackCycleDay, getCycleBounds, getCurrentCycleStatus };
+export { getTransactionCycle, evaluateCashbackSimulation, resolveCategoryCap, getCashbackCycleDay, getCycleBounds, getCycleStatus, getCurrentCycleKey, getCurrentCycleStatus };
