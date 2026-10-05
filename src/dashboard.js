@@ -1,4 +1,4 @@
-import { evaluateCashbackSimulation, getCurrentCycleKey, getCycleStatus } from './calc.js';
+import { evaluateCashbackSimulation, getCashbackCycleDay, getCurrentCycleKey, getCycleBounds, getCycleStatus } from './calc.js';
 import { renderCardsVault } from './cards.js';
 import { renderCharts, renderSspnCharts } from './charts.js';
 import { populateFilterBanksAndYears } from './dropdowns.js';
@@ -7,6 +7,46 @@ import { renderSspnHistoryLedger } from './sspn.js';
 import { currentFilterCard, currentInteractiveCardId, database, filterDeckCollapsed, setCurrentFilterCard, setCurrentInteractiveCardId } from './state.js';
 import { deleteTx, openEditTxModal } from './transactions.js';
 import { getNetworkIcon, getThemeStyles } from './ui.js';
+
+        // The CC dashboard's Year / Month filter selects BILLING CYCLES, not calendar dates: a
+        // transaction belongs to the cycle (t.cycleKey, "YYYY-MM") that ends in that month on its
+        // card's own cut-off day. Picking Oct on a 16th -> 15th card covers 16 Sep -> 15 Oct.
+        function inSelectedCycle(t, selectedYear, selectedMonth) {
+            const key = t.cycleKey || '';
+            return (selectedYear === "ALL" || key.slice(0, 4) === selectedYear)
+                && (selectedMonth === "ALL" || key.slice(5, 7) === selectedMonth);
+        }
+
+        let allStackCollapsed = true;
+        function toggleAllStackSummary() {
+            allStackCollapsed = !allStackCollapsed;
+            renderInteractiveInspectorContent();
+        }
+
+        // One line under the filters saying which dates the selected cycle really covers,
+        // grouped by cut-off so a 17-card stack stays readable.
+        function renderCycleHint() {
+            const el = document.getElementById("filterCycleHint");
+            if (!el) return;
+            const selectedBank = document.getElementById("filterBank").value;
+            const key = selectedPeriodKey();
+            const cards = database.cards.filter(c => (selectedBank === "ALL" || c.bank === selectedBank) && (currentFilterCard === "ALL" || c.id === currentFilterCard));
+            const groups = new Map();
+            cards.forEach(c => {
+                const b = getCycleBounds(key || getCurrentCycleKey(c), getCashbackCycleDay(c));
+                const span = `${fmtDay(b.start)} → ${fmtDay(b.end)}`;
+                if (!groups.has(span)) groups.set(span, { end: b.end, names: [] });
+                groups.get(span).names.push(c.name);
+            });
+            const chips = [...groups.entries()].sort((a, b) => a[1].end - b[1].end).map(([span, g]) =>
+                `<span title="${g.names.join(', ')}" class="px-2 py-0.5 rounded bg-gray-900 border border-gray-800 font-mono text-slate-300">${span} <span class="text-slate-500">· ${g.names.length === 1 ? g.names[0] : g.names.length + ' cards'}</span></span>`).join('');
+            const y = document.getElementById("filterYear").value;
+            const m = document.getElementById("filterMonth").value;
+            const lead = key ? `<b class="text-indigo-300">${fmtPeriod(key)} cycle</b> covers:`
+                : (y === "ALL" && m === "ALL") ? '<b class="text-indigo-300">All cycles</b> · card meters show the live cycle:'
+                : `<b class="text-indigo-300">Cycles ending in ${m === "ALL" ? y : 'month ' + m}</b> · card meters show the live cycle:`;
+            el.innerHTML = `<span class="text-slate-400">${lead}</span> ${chips}`;
+        }
 
         function refreshLedgerAndCalculations() {
             populateFilterBanksAndYears();
@@ -20,11 +60,7 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                 const card = database.cards.find(c => c.id === t.cardId);
                 const bankMatch = (selectedBank === "ALL" || (card && card.bank === selectedBank));
                 const cardMatch = (currentFilterCard === "ALL" || t.cardId === currentFilterCard);
-                const txYear = t.date.substring(0, 4);
-                const txMonth = t.date.substring(5, 7);
-                const yearMatch = (selectedYear === "ALL" || txYear === selectedYear);
-                const monthMatch = (selectedMonth === "ALL" || txMonth === selectedMonth);
-                return bankMatch && cardMatch && yearMatch && monthMatch;
+                return bankMatch && cardMatch && inSelectedCycle(t, selectedYear, selectedMonth);
             });
 
             filteredTxs.sort((a,b) => new Date(b.date) - new Date(a.date));
@@ -46,7 +82,7 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                     const remarkLine = t.remark ? `<div class="text-[9px] text-slate-500 italic">“${t.remark}”</div>` : '';
 
                     return `<tr class="hover:bg-gray-900/30 transition text-[11px]">
-                        <td class="py-3 px-4 font-mono">${t.date}</td>
+                        <td class="py-3 px-4 font-mono">${t.date}${t.cycleKey && t.cycleKey !== t.date.substring(0, 7) ? `<div class="text-[8px] text-indigo-400 font-sans font-semibold">${fmtPeriod(t.cycleKey)} cycle</div>` : ''}</td>
                         <td class="py-3 px-4 font-semibold text-slate-200">
                             <div class="flex items-center gap-1.5">
                                 ${networkIcon}
@@ -90,6 +126,7 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
             document.getElementById("kpiActiveCards").innerText = activeCardsCount;
 
             renderFilterDecks(simulatedTxs);
+            renderCycleHint();
             renderCardsVault();
             renderInteractiveSelectorDeck();
 
@@ -166,14 +203,8 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
 
             html += filteredByBank.map(c => {
                 const styles = getThemeStyles(c.theme);
-                const txs = simulatedTxs.filter(t => {
-                    const cardMatch = t.cardId === c.id;
-                    const txYear = t.date.substring(0, 4);
-                    const txMonth = t.date.substring(5, 7);
-                    const yearMatch = (selectedYear === "ALL" || txYear === selectedYear);
-                    const monthMatch = (selectedMonth === "ALL" || txMonth === selectedMonth);
-                    return cardMatch && yearMatch && monthMatch;
-                });
+                const txs = simulatedTxs.filter(t => t.cardId === c.id && inSelectedCycle(t, selectedYear, selectedMonth));
+                const span = getCycleBounds(selectedPeriodKey() || getCurrentCycleKey(c), getCashbackCycleDay(c));
                 const totalCB = txs.reduce((sum, t) => sum + t.calculatedCashback, 0);
                 const networkIcon = c.network ? getNetworkIcon(c.network) : '';
                 const last4Suffix = c.last4 ? ` •• ${c.last4}` : '';
@@ -198,6 +229,7 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                         <p class="text-[8px] font-mono text-slate-400">${last4Suffix}</p>
                         <p class="text-[10px] text-indigo-400 font-bold font-mono">RM ${totalCB.toFixed(2)}</p>
                     </div>
+                    <p class="text-[8px] font-mono text-slate-500 mt-0.5">${fmtDay(span.start)}–${fmtDay(span.end)}</p>
                 </div>`;
             }).join('');
             
@@ -245,7 +277,7 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
            can straddle two calendar months (Muamalat EON: 16th -> 15th). The inspector therefore
            reads the Year + Month filter as "the period that ENDS in that month": picking Oct
            shows 16 Sep -> 15 Oct. With no specific month picked it shows the live period.
-           (The ledger, KPIs and charts keep plain calendar-month filtering.) */
+           The ledger, KPIs, charts and card tiles use the same cycles (inSelectedCycle). */
 
         const fmtRM = v => v === Infinity ? 'Unlimited' : `RM ${v.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         const fmtDay = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -438,55 +470,34 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                     .filter(c => selectedBank === "ALL" || c.bank === selectedBank)
                     .map(c => ({ card: c, st: cardPeriodStatus(c, simulatedTxs) }));
 
-                const totalConsolidatedSpend = statuses.reduce((s, x) => s + x.st.spend, 0);
-                const totalConsolidatedCashback = statuses.reduce((s, x) => s + x.st.earned, 0);
-                const totalRemainingCashbackQuota = statuses.reduce((s, x) => s + (x.st.cbLeft === Infinity ? x.st.cardCapLeft : x.st.cbLeft), 0);
-                const averageYield = totalConsolidatedSpend > 0 ? (totalConsolidatedCashback / totalConsolidatedSpend) * 100 : 0;
-                const remainingQuotaText = totalRemainingCashbackQuota === Infinity ? "Unlimited / Infinite" : fmtRM(totalRemainingCashbackQuota);
+                const cbAvail = statuses.reduce((sum, x) => sum + (x.st.cbLeft === Infinity ? x.st.cardCapLeft : x.st.cbLeft), 0);
+                const live = statuses.filter(x => x.st.phase === 'current');
+                const maxed = live.filter(x => x.st.minSpendLeft <= 0 && x.st.isMaxed).length;
+                const locked = live.filter(x => x.st.minSpendLeft > 0).length;
+                const summary = [
+                    `${statuses.length} card${statuses.length === 1 ? '' : 's'}`,
+                    `<span class="text-emerald-400">${cbAvail === Infinity ? 'Unlimited' : fmtRM(cbAvail)} CB ${live.length ? 'left' : 'unused'}</span>`,
+                    maxed ? `<span class="text-rose-400">${maxed} maxed</span>` : '',
+                    locked ? `<span class="text-amber-400">${locked} locked</span>` : ''
+                ].filter(Boolean).join(' · ');
 
                 inspector.innerHTML = `
                     <div class="space-y-4">
-                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-2 border-b border-gray-800">
+                        <button onclick="toggleAllStackSummary()" class="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-left focus:outline-none ${allStackCollapsed ? '' : 'pb-2 border-b border-gray-800'}">
                             <div>
                                 <h4 class="text-sm font-bold text-indigo-400 flex items-center gap-2">
                                     <i class="fa-solid fa-layer-group text-sm"></i>
                                     <span>Consolidated "All Stack" Summary</span>
                                 </h4>
-                                <span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">${filterLabel} · each card on its own cashback period</span>
+                                <span class="text-[9px] font-mono text-slate-500 uppercase tracking-widest">${filterLabel} · each card on its own billing cycle</span>
                             </div>
-                            <span class="text-[9px] font-black uppercase px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">Audit Standard: Per-Rule Cap Summed</span>
-                        </div>
+                            <span class="flex items-center gap-2 text-[10px] font-mono font-semibold text-slate-300">
+                                ${summary}
+                                <i class="fa-solid ${allStackCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'} text-slate-400 text-xs"></i>
+                            </span>
+                        </button>
 
-                        ${renderPeriodQuotaTable(statuses)}
-
-                        <!-- Consolidated Metrics Grid -->
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="bg-gray-950/60 p-4 rounded-xl border border-gray-800/80 space-y-1">
-                                <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Total Spend</span>
-                                <h2 class="text-xl font-bold text-slate-100 font-mono">RM ${totalConsolidatedSpend.toFixed(2)}</h2>
-                                <p class="text-[8px] text-slate-500">Combined period volumes</p>
-                            </div>
-                            <div class="bg-gray-950/60 p-4 rounded-xl border border-gray-800/80 space-y-1">
-                                <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Total Cash Back</span>
-                                <h2 class="text-xl font-bold text-emerald-400 font-mono">RM ${totalConsolidatedCashback.toFixed(2)}</h2>
-                                <p class="text-[8px] text-slate-500">Calculated earnings matches</p>
-                            </div>
-                            <div class="bg-gray-950/60 p-4 rounded-xl border border-gray-800/80 space-y-1">
-                                <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Cash Back Available</span>
-                                <h2 class="text-xl font-bold text-indigo-400 font-mono">${remainingQuotaText}</h2>
-                                <p class="text-[8px] text-slate-500 font-sans">Summed remaining tier breakdowns</p>
-                            </div>
-                            <div class="bg-gray-950/60 p-4 rounded-xl border border-gray-800/80 space-y-1">
-                                <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Average Wallet Yield</span>
-                                <h2 class="text-xl font-bold text-violet-400 font-mono">${averageYield.toFixed(2)}%</h2>
-                                <p class="text-[8px] text-slate-500 font-sans">Combined efficiency rating</p>
-                            </div>
-                        </div>
-
-                        <div class="p-3 bg-gray-950 border border-gray-800 rounded-xl flex items-center gap-1.5 text-[10px] text-slate-400 leading-relaxed font-sans">
-                            <i class="fa-solid fa-circle-info text-indigo-400"></i>
-                            <span>You are looking at high-level consolidated metrics. Expand the "Filter Workspace View" above and tap any single card to isolate individual parameters.</span>
-                        </div>
+                        ${allStackCollapsed ? '' : renderPeriodQuotaTable(statuses)}
                     </div>
                 `;
                 return;
@@ -538,4 +549,4 @@ function applyCurrentMonthDefaults() {
     });
 }
 
-export { refreshLedgerAndCalculations, renderFilterDecks, setCardFilter, loadCardInteractiveMeter, renderInteractiveSelectorDeck, renderInteractiveInspectorContent, applyCurrentMonthDefaults, jumpToCyclePeriod };
+export { refreshLedgerAndCalculations, renderFilterDecks, setCardFilter, loadCardInteractiveMeter, renderInteractiveSelectorDeck, renderInteractiveInspectorContent, applyCurrentMonthDefaults, jumpToCyclePeriod, toggleAllStackSummary };

@@ -96,18 +96,18 @@
                 <div class="flex flex-col md:flex-row justify-between md:items-center gap-4">
                     <div>
                         <h4 class="text-xs font-bold text-indigo-400 uppercase tracking-widest"><i class="fa-solid fa-calendar mr-1.5"></i>Global Scope Filter</h4>
-                        <p class="text-[10px] text-slate-400 mt-1">Filter CC yields, spending progress, and wallet balances</p>
+                        <p class="text-[10px] text-slate-400 mt-1">Month = billing cycle <b>ending</b> in that month, on each card's own cut-off day</p>
                     </div>
                     <div class="flex flex-wrap gap-2.5">
                         <!-- Bank Filter -->
                         <select id="filterBank" onchange="refreshLedgerAndCalculations()" class="bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold min-w-[140px]">
                             <option value="ALL">All Banks</option>
                         </select>
-                        <!-- Calendar Year Filter -->
+                        <!-- Cycle Year Filter -->
                         <select id="filterYear" onchange="refreshLedgerAndCalculations()" class="bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold min-w-[120px]">
                             <option value="ALL">All Years</option>
                         </select>
-                        <!-- Calendar Month Filter -->
+                        <!-- Cycle Month Filter (cycle ending in this month) -->
                         <select id="filterMonth" onchange="refreshLedgerAndCalculations()" class="bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold min-w-[140px]">
                             <option value="ALL">All Months</option>
                             <option value="01">January</option>
@@ -125,6 +125,7 @@
                         </select>
                     </div>
                 </div>
+                <div id="filterCycleHint" class="flex flex-wrap items-center gap-1.5 text-[9px] pt-1 border-t border-gray-800/60"></div>
             </div>
 
             <!-- Sleek Collapsible Filter Deck Accordion -->
@@ -1769,7 +1770,7 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.10.05-1';
+      window.APP_VERSION = '2026.10.05-2';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','merge','dashboard','dropdowns',
