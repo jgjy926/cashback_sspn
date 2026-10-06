@@ -317,6 +317,13 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                 ? { cls: 'text-amber-400', badge: tone.amber, label: 'Min Spend Missed', text: `Closed ${fmtRM(st.minSpendLeft)} short of the minimum spend` }
                 : { cls: 'text-amber-400', badge: tone.amber, label: 'Locked (Under Minimum)', text: `Spend ${fmtRM(st.minSpendLeft)} more to unlock cashback` };
             if (st.isMaxed) return { cls: 'text-rose-400', badge: tone.rose, label: 'Maxed Out', text: st.phase === 'past' ? 'Cap fully used this period' : 'Maxed out — switch card until next period' };
+            if (st.nextTier) {
+                const t = st.nextTier;
+                const pct = `${+(t.rate * 100).toFixed(1)}%`;
+                return st.phase === 'past'
+                    ? { cls: 'text-amber-400', badge: tone.amber, label: 'Tier Missed', text: `Closed ${fmtRM(t.spendLeft)} short of the ${pct} tier` }
+                    : { cls: 'text-amber-400', badge: tone.amber, label: 'Tier Locked', text: `Spend ${fmtRM(t.spendLeft)} more to unlock ${pct} on ${t.categories.join(', ')}` };
+            }
             return st.phase === 'past'
                 ? { cls: 'text-slate-400', badge: tone.slate, label: 'Closed', text: `Period closed with ${unused} of cap unused` }
                 : { cls: 'text-emerald-400', badge: tone.emerald, label: 'Sweet Spot', text: 'Under cap — keep using this card' };
@@ -356,17 +363,27 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                 const restrictions = ruleRestrictions(r.rule);
                 const badge = restrictions.length ? `<span class="bg-indigo-950 text-indigo-400 text-[8px] px-1.5 py-0.2 rounded font-bold">${restrictions.join(" | ")}</span>` : "";
                 const pct = r.catCap !== Infinity ? Math.min((r.earned / r.catCap) * 100, 100) : 100;
+                // Locked tier that upgrades this category: show headroom at the tier rate instead.
+                const tier = st.nextTier && st.nextTier.categories.includes(r.category) ? st.nextTier : null;
+                const at = tier && tier.byCategory[r.category];
+                const tierPct = at && r.catCap !== Infinity ? Math.min((at.earned / r.catCap) * 100, 100) : 0;
+                const rateLabel = at
+                    ? `(${+(r.rate * 100).toFixed(1)}% <span class="text-amber-400">→ ${+(at.rate * 100).toFixed(1)}% at RM ${tier.threshold.toFixed(0)}</span>)`
+                    : `(${(r.rate * 100).toFixed(1)}%)`;
                 const headroom = !r.active
                     ? '<span class="text-slate-600">not active this month</span>'
-                    : live ? `${fmtRM(r.spendLeft)} spend · ${fmtRM(r.cbLeft)} CB left` : '';
+                    : !live ? ''
+                    : at ? `<span class="text-amber-300" title="At the ${+(at.rate * 100).toFixed(1)}% tier, counting spend already made">${at.cbLeft <= 0.005 ? 'maxed once tier unlocks' : `${fmtRM(at.spendLeft)} spend · ${fmtRM(at.cbLeft)} CB left`} @ tier</span>`
+                    : `${fmtRM(r.spendLeft)} spend · ${fmtRM(r.cbLeft)} CB left`;
                 return `
                     <div class="space-y-1 bg-gray-950/40 p-3 rounded-lg border border-gray-800/40 font-mono ${r.active ? '' : 'opacity-60'}">
                         <div class="flex justify-between gap-2 text-[10px] text-slate-300 font-semibold font-sans">
-                            <span>${r.category} <span class="text-slate-500 font-normal">(${(r.rate * 100).toFixed(1)}%)</span> ${badge}</span>
-                            <span class="whitespace-nowrap">RM ${r.earned.toFixed(2)} / ${r.catCap !== Infinity ? 'RM ' + r.catCap.toFixed(0) : 'No Limit'}</span>
+                            <span>${r.category} <span class="text-slate-500 font-normal">${rateLabel}</span> ${badge}</span>
+                            <span class="whitespace-nowrap">RM ${r.earned.toFixed(2)}${at ? ` <span class="text-amber-400">→ RM ${at.earned.toFixed(2)}</span>` : ''} / ${r.catCap !== Infinity ? 'RM ' + r.catCap.toFixed(0) : 'No Limit'}</span>
                         </div>
-                        <div class="w-full bg-gray-950 h-1.5 rounded-full overflow-hidden border border-gray-900">
-                            <div class="bg-violet-500 h-full rounded-full transition-all" style="width: ${pct}%"></div>
+                        <div class="relative w-full bg-gray-950 h-1.5 rounded-full overflow-hidden border border-gray-900">
+                            ${at ? `<div class="absolute inset-y-0 left-0 bg-amber-500/40 rounded-full transition-all" style="width: ${tierPct}%"></div>` : ''}
+                            <div class="relative bg-violet-500 h-full rounded-full transition-all" style="width: ${pct}%"></div>
                         </div>
                         <div class="flex justify-between gap-2 text-[9px] text-slate-500 font-sans">
                             <span>${r.rule.merchants ? `<i class="fa-solid fa-store text-indigo-400"></i> ${r.rule.merchants}` : `Spent RM ${r.spend.toFixed(2)}`}</span>
@@ -381,6 +398,35 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                     <h2 class="text-lg font-bold font-mono ${cls}">${value}</h2>
                 </div>`;
 
+            // Spend-tier unlock strip: progress toward the next tier threshold, with a tick per tier.
+            let tierHTML = '';
+            if (st.tierThresholds.length) {
+                const top = st.tierThresholds[st.tierThresholds.length - 1];
+                const scale = Math.max(top, st.spend);
+                const fillPct = Math.min((st.spend / scale) * 100, 100);
+                const ticks = st.tierThresholds.map(m => `<div class="absolute top-0 h-full w-0.5 bg-amber-300/80" style="left: calc(${(m / scale) * 100}% - 1px)"></div>`).join('');
+                const t = st.nextTier;
+                const pct = r => `${+(r * 100).toFixed(1)}%`;
+                const head = t
+                    ? `<span class="text-amber-300"><i class="fa-solid fa-lock"></i> ${live ? 'Spend' : 'Was'} <b class="font-mono text-amber-200">${fmtRM(t.spendLeft)}</b> ${live ? 'more to unlock' : 'short of'} the ${pct(t.rate)} tier</span>`
+                    : `<span class="text-emerald-400"><i class="fa-solid fa-lock-open"></i> Top tier unlocked</span>`;
+                const sub = t
+                    ? `${t.categories.join(', ')}: ${pct(t.fromRate)} → ${pct(t.rate)} on the whole period's spend · earned would be RM ${t.earnedAtTier.toFixed(2)} (now RM ${st.earned.toFixed(2)})`
+                    : `Period spend RM ${st.spend.toFixed(2)} ≥ RM ${top.toFixed(0)}`;
+                tierHTML = `
+                    <div class="space-y-1 bg-amber-500/5 p-3 rounded-lg border ${t ? 'border-amber-500/25' : 'border-emerald-500/25'}">
+                        <div class="flex flex-wrap justify-between gap-2 text-[10px] font-semibold">
+                            ${head}
+                            <span class="font-mono text-slate-400">RM ${st.spend.toFixed(2)} / RM ${(t ? t.threshold : top).toFixed(0)}</span>
+                        </div>
+                        <div class="relative w-full bg-gray-900 h-2 rounded-full overflow-hidden">
+                            <div class="${t ? 'bg-amber-500' : 'bg-emerald-500'} h-full rounded-full transition-all" style="width: ${fillPct}%"></div>
+                            ${ticks}
+                        </div>
+                        <p class="text-[9px] text-slate-500">${sub}</p>
+                    </div>`;
+            }
+
             return `
                 <div class="bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/25 space-y-3">
                     <div class="flex flex-wrap justify-between items-center gap-2">
@@ -388,6 +434,7 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                         <span class="text-[10px] font-mono text-slate-400">${fmtDay(st.start)} → ${fmtDay(st.end)} · ${phaseText(st)}</span>
                     </div>
                     ${note}
+                    ${tierHTML}
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         ${stat('Spend Left to Max', live ? (st.isMaxed ? 'RM 0.00' : fmtRM(st.totalSpendLeft)) : '—', 'text-indigo-300')}
                         ${stat(live ? 'Cashback Left' : 'Cap Unused', fmtRM(cbLeft), 'text-emerald-400')}

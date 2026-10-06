@@ -93,15 +93,20 @@ import { database } from './state.js';
             // the month new spend would land in), otherwise the period's end month.
             const monthStr = phase === 'current' ? String(now.getMonth() + 1).padStart(2, '0') : cycleKey.slice(5, 7);
 
+            const tierRate = (r, level) => {
+                let rate = r.rate || 0;
+                if (r.tiered && Array.isArray(r.tiers) && r.tiers.length > 0) {
+                    const tier = [...r.tiers].sort((a, b) => b.minSpend - a.minSpend).find(tr => level >= tr.minSpend);
+                    if (tier) rate = tier.rate;
+                }
+                return rate;
+            };
+
             const rules = (card.rules || []).map(r => {
                 const ruleTxs = txs.filter(t => t.category === r.category);
                 const ruleEarned = ruleTxs.reduce((s, t) => s + t.calculatedCashback, 0);
                 const ruleSpend = ruleTxs.reduce((s, t) => s + t.amount, 0);
-                let rate = r.rate || 0;
-                if (r.tiered && Array.isArray(r.tiers) && r.tiers.length > 0) {
-                    const tier = [...r.tiers].sort((a, b) => b.minSpend - a.minSpend).find(tr => spend >= tr.minSpend);
-                    if (tier) rate = tier.rate;
-                }
+                const rate = tierRate(r, spend);
                 let active = true;
                 if (r.monthsOnly) {
                     const months = r.monthsOnly.split(',').map(m => m.trim().padStart(2, '0'));
@@ -115,16 +120,57 @@ import { database } from './state.js';
                 return { rule: r, category: r.category, rate, active, earned: ruleEarned, spend: ruleSpend, catCap, catLeft, cbLeft, spendLeft };
             });
 
-            // Total qualifying spend left: fill the best-rate rules first, each limited by its
+            // Qualifying spend needed to fill the cap: best-rate rules first, each limited by its
             // own category headroom and by whatever card-level cap remains after the previous.
-            let capPool = cardCapLeft;
-            let totalSpendLeft = 0;
-            [...rules].filter(r => r.active && r.rate > 0).sort((a, b) => b.rate - a.rate).forEach(r => {
-                const take = Math.min(r.catLeft, capPool);
-                if (take === Infinity) { totalSpendLeft = Infinity; return; }
-                totalSpendLeft += take / r.rate;
-                capPool -= take;
-            });
+            const fillSpend = (list, pool) => {
+                let total = 0;
+                [...list].filter(r => r.active && r.rate > 0).sort((a, b) => b.rate - a.rate).forEach(r => {
+                    const take = Math.min(r.catLeft, pool);
+                    if (take === Infinity) { total = Infinity; return; }
+                    total += take / r.rate;
+                    pool -= take;
+                });
+                return total;
+            };
+            let totalSpendLeft = fillSpend(rules, cardCapLeft);
+
+            // Spend tiers (e.g. UOB ONE: 10% once the period's total spend reaches RM800). A tier
+            // is applied to the whole period's spend, so crossing it re-rates what is already
+            // spent. Each tier threshold above the current spend is a "next tier" candidate.
+            const thresholds = [...new Set(rules.filter(r => r.active && r.rule.tiered && Array.isArray(r.rule.tiers))
+                .flatMap(r => r.rule.tiers.map(t => t.minSpend))
+                .filter(m => m > spend))].sort((a, b) => a - b);
+            const tierAt = level => {
+                const re = rules.map(r => {
+                    const rate = tierRate(r.rule, level);
+                    const earned = Math.min(r.catCap, r.spend * rate);
+                    return { ...r, rate, earned, catLeft: Math.max(0, r.catCap - earned) };
+                });
+                const earned = Math.min(cardCap, re.reduce((s, r) => s + r.earned, 0));
+                return { rules: re, earned, capLeft: Math.max(0, cardCap - earned) };
+            };
+            const tierSteps = thresholds.map(threshold => {
+                const at = tierAt(threshold);
+                const upgraded = at.rules.filter((r, i) => r.rate > rules[i].rate);
+                // Cheapest way to max via this tier: reach the threshold, and keep spending until the cap fills.
+                const toMax = Math.max(threshold - spend, fillSpend(at.rules, at.capLeft));
+                return {
+                    threshold, spendLeft: threshold - spend,
+                    rate: Math.max(...upgraded.map(r => r.rate), 0),
+                    fromRate: Math.max(...upgraded.map(r => rules.find(x => x.category === r.category).rate), 0),
+                    categories: upgraded.map(r => r.category),
+                    earnedAtTier: at.earned, toMax,
+                    // Per-category view once this tier is unlocked (existing spend re-rated).
+                    byCategory: Object.fromEntries(at.rules.map(r => {
+                        const cbLeft = r.active ? Math.min(r.catLeft, at.capLeft) : 0;
+                        return [r.category, { rate: r.rate, earned: r.earned, cbLeft, spendLeft: r.rate > 0 ? cbLeft / r.rate : 0 }];
+                    }))
+                };
+            }).filter(s => s.categories.length > 0);
+            const nextTier = tierSteps[0] || null;
+            tierSteps.forEach(s => { if (s.toMax < totalSpendLeft) totalSpendLeft = s.toMax; });
+            const tierThresholds = [...new Set((card.rules || []).filter(r => r.tiered && Array.isArray(r.tiers))
+                .flatMap(r => r.tiers.map(t => t.minSpend)).filter(m => m > 0))].sort((a, b) => a - b);
 
             const cbLeft = Math.min(cardCapLeft, rules.reduce((s, r) => s + r.cbLeft, 0));
             const isMaxed = (cardCap !== Infinity && cardCapLeft <= 0.005) || (rules.length > 0 && totalSpendLeft <= 0.005);
@@ -133,6 +179,7 @@ import { database } from './state.js';
                 cycleKey, endDay, ...bounds, phase, daysTotal, daysLeft,
                 spend, earned, cardCap, cardCapLeft, cbLeft,
                 minSpend, minSpendLeft,
+                nextTier, tierThresholds,
                 totalSpendLeft,
                 dailyPace: totalSpendLeft !== Infinity && daysLeft > 0 ? totalSpendLeft / daysLeft : 0,
                 isMaxed, rules
