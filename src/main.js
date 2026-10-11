@@ -33,6 +33,9 @@ import { initAutoSync } from './autosync.js';
 Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts, claims, medical, vehicle, savings, autosync, statement);
 
 window.addEventListener('load', () => {
+  // Show which deploy this device is running (APP_VERSION in index.html), so a stale cache is easy to spot.
+  const ver = document.getElementById('appVersionLabel');
+  if (ver) ver.textContent = 'v' + (window.APP_VERSION || '?');
   loadFromLocalStorage();
   initDatePickers();
   populateDropdownOptions();
