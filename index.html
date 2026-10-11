@@ -1034,6 +1034,15 @@
                         </select>
                     </div>
                 </div>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <label class="flex items-center gap-2 text-[11px] text-slate-400 cursor-pointer"><input type="checkbox" onchange="toggleAllReceipts(this)" class="accent-indigo-500">Select all shown</label>
+                    <div class="flex flex-wrap gap-2">
+                    <button onclick="openReceiptEnrichPanel()" title="Copy a ready-made prompt into Claude, then paste its reply back — tick receipts first, or it takes the not-yet-enriched ones" class="bg-gray-900 border border-gray-800 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition hover:border-emerald-500 text-slate-200"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Claude copy/paste</button>
+                    <button onclick="exportReceiptsRaw()" title="Download the ticked (or not-yet-enriched) receipts as a JSON file for Claude" class="bg-gray-900 border border-gray-800 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition hover:border-indigo-500 text-slate-400"><i class="fa-solid fa-file-export mr-1"></i>Export</button>
+                    <label for="recImportFile" class="cursor-pointer bg-gray-900 border border-gray-800 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition hover:border-emerald-500 text-slate-400 inline-flex items-center"><i class="fa-solid fa-file-import mr-1"></i>Import JSON</label>
+                    <input type="file" id="recImportFile" accept="application/json,.json" onchange="handleReceiptImportFile(this)" class="hidden">
+                </div>
+                </div>
                 <div id="receiptsList" class="space-y-2"></div>
             </div>
         </section>
@@ -1128,10 +1137,17 @@
                                 <select id="claimFilterStatus" onchange="renderClaims()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold"><option value="ALL">All Statuses</option></select>
                             </div>
                         </div>
+                        <div class="flex flex-wrap gap-2">
+                    <button onclick="openClaimEnrichPanel()" title="Copy a ready-made prompt into Claude, then paste its reply back — tick claims first, or it takes the not-yet-enriched ones" class="bg-gray-900 border border-gray-800 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition hover:border-emerald-500 text-slate-200"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Claude copy/paste</button>
+                    <button onclick="exportClaimsRaw()" title="Download the ticked (or not-yet-enriched) claims as a JSON file for Claude" class="bg-gray-900 border border-gray-800 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition hover:border-indigo-500 text-slate-400"><i class="fa-solid fa-file-export mr-1"></i>Export</button>
+                    <label for="claimImportFile" class="cursor-pointer bg-gray-900 border border-gray-800 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition hover:border-emerald-500 text-slate-400 inline-flex items-center"><i class="fa-solid fa-file-import mr-1"></i>Import JSON</label>
+                    <input type="file" id="claimImportFile" accept="application/json,.json" onchange="handleClaimImportFile(this)" class="hidden">
+                </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-left">
                                 <thead class="text-[9px] uppercase tracking-wider text-slate-500 border-b border-gray-800">
                                     <tr>
+                                        <th class="py-2 px-3 text-center"><input type="checkbox" onchange="toggleAllClaims(this)" title="Select all" class="accent-indigo-500"></th>
                                         <th class="py-2 px-4">Claim</th>
                                         <th class="py-2 px-4">Submitted</th>
                                         <th class="py-2 px-4 text-right">Claimed</th>
@@ -1770,7 +1786,7 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.10.05-2';
+      window.APP_VERSION = '2026.10.11-1';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','merge','dashboard','dropdowns',

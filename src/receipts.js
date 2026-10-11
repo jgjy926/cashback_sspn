@@ -8,6 +8,7 @@ import { showToast } from './ui.js';
 import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant,
   aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD, AI_FIELD_CEILING } from './ocr.js';
 import { gatewayConfig } from './config.js';
+import { openEnrichPanel, downloadJson, importJsonFile, scopeRecords } from './enrich.js';
 
 // Multi-photo capture. `pendingPhotos[0]` is the PRIMARY photo used by the existing receipt /
 // ledger / claim flows (via `pending`); any extra photos are grouped into a Medicine & Records
@@ -102,7 +103,7 @@ function receiptClaimBadge(status) {
   if (s.includes('reimburs') || s.includes('approved') || s.includes('paid') || s.includes('done')) cls = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
   else if (s.includes('reject') || s.includes('declin') || s.includes('cancel')) cls = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
   else if (s.includes('submit') || s.includes('pending') || s.includes('process') || s.includes('review')) cls = 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
-  return `<span class="text-[8px] px-1.5 rounded font-bold border ${cls}">${status}</span>`;
+  return `<span class="text-[8px] px-1.5 rounded font-bold border ${cls}">${esc(status)}</span>`;
 }
 
 // ---------- capture + OCR ----------
@@ -439,13 +440,15 @@ export function renderReceipts() {
     const linked = r.txId ? '<span class="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 rounded font-bold">Ledger</span>' : '';
     const claimBadge = receiptClaimBadge(r.claimStatus);
     const claimedBadge = r.claimId ? '<span class="text-[8px] bg-violet-500/10 text-violet-300 border border-violet-500/20 px-1.5 rounded font-bold">Claimed</span>' : '';
-    const payBadge = r.paymentMethod ? `<span class="text-[8px] bg-slate-500/10 text-slate-300 border border-slate-500/20 px-1.5 rounded font-bold">${r.paymentMethod}</span>` : '';
-    const remark = r.remark ? `<div class="text-[10px] text-slate-400 italic truncate">“${r.remark}”</div>` : '';
+    const payBadge = r.paymentMethod ? `<span class="text-[8px] bg-slate-500/10 text-slate-300 border border-slate-500/20 px-1.5 rounded font-bold">${esc(r.paymentMethod)}</span>` : '';
+    const aiBadge = r.enriched ? '<span title="Enriched with Claude" class="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 rounded font-bold"><i class="fa-solid fa-wand-magic-sparkles"></i></span>' : '';
+    const remark = r.remark ? `<div class="text-[10px] text-slate-400 italic truncate">“${esc(r.remark)}”</div>` : '';
     return `
       <div class="flex items-center justify-between gap-3 p-3 bg-gray-950/40 border border-gray-800/60 rounded-xl">
-        <div class="min-w-0">
-          <div class="text-xs font-bold text-slate-200 truncate flex items-center gap-1.5">${r.merchant || '(no merchant)'} ${linked} ${claimBadge} ${claimedBadge} ${payBadge}</div>
-          <div class="text-[10px] text-slate-500 font-mono">${r.date || ''} · ${r.currency || ''} ${amt} · ${(r.bytes / 1024).toFixed(0)} KB</div>
+        <input type="checkbox" data-rec-pick value="${esc(r.id)}" title="Select for Claude enrichment" class="accent-indigo-500 shrink-0">
+        <div class="min-w-0 flex-1">
+          <div class="text-xs font-bold text-slate-200 truncate flex items-center gap-1.5">${esc(r.merchant || '(no merchant)')} ${linked} ${claimBadge} ${claimedBadge} ${payBadge} ${aiBadge}</div>
+          <div class="text-[10px] text-slate-500 font-mono">${esc(r.date || '')} · ${esc(r.currency || '')} ${esc(amt)} · ${(r.bytes / 1024).toFixed(0)} KB</div>
           ${remark}
         </div>
         <div class="flex gap-1.5 shrink-0">
@@ -816,4 +819,141 @@ function renderDayKpi(items) {
       <div class="bg-gray-950/60 border border-gray-800 rounded-lg p-2 text-center"><div class="text-[8px] uppercase text-slate-500">Claimed/Not</div><div class="text-[11px] font-bold text-slate-200 font-mono">${claimed.toFixed(0)}/${unclaimed.toFixed(0)}</div></div>
     </div>
     <div class="flex flex-wrap gap-1">${cats}</div>`;
+}
+
+// ---------- Claude enrichment : clean up OCR'd receipts, then store them everywhere they're linked ----------
+const RECEIPT_EXPORT_TYPE = 'receipt-raw-export';
+const RECEIPT_IMPORT_TYPE = 'receipt-enriched-import';
+
+const RECEIPT_INSTRUCTIONS =
+  'You clean up Malaysian purchase receipts captured with phone OCR. ' +
+  'For EACH record in "records", read its "rawOcr" (may be messy, multi-photo or empty) together with its current fields, and return a record that keeps the SAME "id". ' +
+  'Fill: merchant (clean store / clinic name, no branch codes), date (YYYY-MM-DD), total (final amount paid, a number), currency (default MYR), ' +
+  'category (MUST be one of that record\'s "allowedCategories", otherwise omit it), internalTag (one of "internalTags"), ' +
+  'paymentMethod (one of "paymentMethods", only if the receipt shows how it was paid), ' +
+  'claimType (one of "claimTypes", ONLY when the purchase is clearly claimable, e.g. clinic/pharmacy -> Medical; otherwise omit), ' +
+  'receiptNumber (the invoice/receipt/bill number if printed), remark (a short note of what was bought, max 60 characters). ' +
+  'Do NOT invent values: omit any field you cannot determine and the current value is kept. ' +
+  'Return ONLY: { "type": "receipt-enriched-import", "schemaVersion": 1, "records": [ <one record per input record> ] }.';
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function cardCategories(cardId) {
+  const card = database.cards.find(c => c.id === cardId);
+  return ((card && card.rules) || []).map(r => r.category);
+}
+function paymentMethodList() {
+  return [...database.cards.map(c => c.name), ...(database.settings.paymentMethods || [])];
+}
+
+function pickedReceiptRows() {
+  return [...document.querySelectorAll('#receiptsList input[data-rec-pick]:checked')].map(cb => cb.value);
+}
+export function toggleAllReceipts(master) {
+  document.querySelectorAll('#receiptsList input[data-rec-pick]').forEach(cb => { cb.checked = master.checked; });
+}
+
+function receiptEnrichPayload(scope) {
+  const res = scopeRecords(database.receipts || [], scope, pickedReceiptRows(), 'receipts');
+  if (res.error) return res;
+  return { payload: {
+    type: RECEIPT_EXPORT_TYPE,
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    instructions: RECEIPT_INSTRUCTIONS,
+    internalTags: database.settings.internalCategories || [],
+    paymentMethods: paymentMethodList(),
+    claimTypes: database.settings.claimTypes || [],
+    targetSchema: { id: '', merchant: '', date: 'YYYY-MM-DD', total: 0, currency: 'MYR', category: '', internalTag: '', paymentMethod: '', claimType: '', receiptNumber: '', remark: '' },
+    records: res.records.map(r => {
+      const card = database.cards.find(c => c.id === r.cardId);
+      return {
+        id: r.id, merchant: r.merchant || '', date: r.date || '', total: r.total || 0, currency: r.currency || 'MYR',
+        card: card ? card.name : '', allowedCategories: cardCategories(r.cardId),
+        category: r.category || '', internalTag: r.internalTag || '', paymentMethod: r.paymentMethod || '',
+        claimType: r.claimType || '', remark: r.remark || '', rawOcr: r.ocrText || '',
+      };
+    }),
+  } };
+}
+
+export function openReceiptEnrichPanel() {
+  openEnrichPanel({
+    title: 'Enrich receipts with Claude',
+    defaultScope: pickedReceiptRows().length ? 'selected' : 'new',
+    build: receiptEnrichPayload,
+    importData: importReceiptsEnriched,
+  });
+}
+
+export function exportReceiptsRaw() {
+  const { payload, error } = receiptEnrichPayload(pickedReceiptRows().length ? 'selected' : 'new');
+  if (error) { showToast(error, 'error'); return; }
+  downloadJson(payload, `receipts-raw-${new Date().toISOString().slice(0, 10)}.json`);
+  showToast(`Exported ${payload.records.length} receipt(s). Give the file to Claude, then import the JSON it returns.`, 'success');
+}
+
+export function handleReceiptImportFile(input) { importJsonFile(input, importReceiptsEnriched); }
+
+// Apply Claude's fields to each receipt (only values that are present and valid), then carry them
+// to the linked ledger transaction and solo claim — the same sync the Edit modal does — and create
+// the claim when a claim type is newly identified, so nothing needs re-entering by hand.
+function importReceiptsEnriched(data) {
+  if (!data || (data.type && data.type !== RECEIPT_IMPORT_TYPE) || !Array.isArray(data.records)) {
+    return { ok: false, message: `Import failed: expected a "${RECEIPT_IMPORT_TYPE}" object with a "records" array.` };
+  }
+  const str = v => (v == null ? '' : String(v).trim());
+  const tags = database.settings.internalCategories || [];
+  const pays = paymentMethodList();
+  const claimTypes = database.settings.claimTypes || [];
+  let updated = 0, unknown = 0, txSynced = 0, claimsSynced = 0, claimsCreated = 0;
+
+  data.records.forEach(rec => {
+    const r = rec && rec.id && (database.receipts || []).find(x => x.id === rec.id);
+    if (!r) { unknown++; return; }
+    if (str(rec.merchant)) r.merchant = str(rec.merchant);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str(rec.date))) r.date = str(rec.date);
+    if (Number(rec.total) > 0) r.total = Number(rec.total);
+    if (str(rec.currency)) r.currency = str(rec.currency).toUpperCase();
+    if (cardCategories(r.cardId).includes(str(rec.category))) r.category = str(rec.category);
+    if (tags.includes(str(rec.internalTag))) r.internalTag = str(rec.internalTag);
+    if (pays.includes(str(rec.paymentMethod))) r.paymentMethod = str(rec.paymentMethod);
+    if (claimTypes.includes(str(rec.claimType))) r.claimType = str(rec.claimType);
+    if (str(rec.remark)) r.remark = str(rec.remark);
+    r.enriched = true;
+    learnMerchant(r.ocrText, r.merchant);
+
+    const tx = r.txId && database.transactions.find(t => t.id === r.txId);
+    if (tx) {
+      tx.date = r.date; tx.amount = r.total; tx.category = r.category; tx.internalTag = r.internalTag;
+      tx.description = r.merchant || 'Receipt'; tx.remark = r.remark;
+      txSynced++;
+    }
+    const solo = linkedSoloClaim(r);
+    if (solo) {
+      solo.title = r.merchant || solo.title;
+      solo.type = r.claimType || solo.type;
+      solo.claimedAmount = r.total;
+      solo.remark = r.remark;
+      if (str(rec.receiptNumber) && !solo.reference) solo.reference = str(rec.receiptNumber);
+      claimsSynced++;
+    } else if (!r.claimId && r.claimType) {
+      r.claimId = createClaimFromReceipt(r, { reference: str(rec.receiptNumber) });
+      claimsCreated++;
+    }
+    updated++;
+  });
+
+  saveToLocalStorage();
+  refreshLedgerAndCalculations();
+  renderReceipts();
+  renderClaims();
+  let msg = `Imported: ${updated} receipt(s) enriched`;
+  if (txSynced) msg += ` · ${txSynced} ledger entr${txSynced > 1 ? 'ies' : 'y'} updated`;
+  if (claimsSynced) msg += ` · ${claimsSynced} claim(s) updated`;
+  if (claimsCreated) msg += ` · ${claimsCreated} claim(s) created`;
+  if (unknown) msg += ` · ${unknown} unknown id(s) skipped`;
+  return { ok: updated > 0, message: updated ? msg : `${msg} — none of the ids match your receipts.` };
 }

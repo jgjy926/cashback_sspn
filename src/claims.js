@@ -7,6 +7,7 @@ import { database } from './state.js';
 import { saveToLocalStorage } from './storage.js';
 import { askConfirm, showToast } from './ui.js';
 import { renderClaimCharts } from './charts.js';
+import { openEnrichPanel, downloadJson, importJsonFile, scopeRecords } from './enrich.js';
 
 // ---------- helpers ----------
 function claimTypes() { return database.settings.claimTypes || []; }
@@ -214,19 +215,21 @@ function renderClaimsLedger(list) {
   if (!body) return;
   const sorted = [...list].sort((a, b) => new Date(b.submittedDate || b.createdAt) - new Date(a.submittedDate || a.createdAt));
   if (sorted.length === 0) {
-    body.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-xs text-slate-500 italic">No claims match this filter.</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-xs text-slate-500 italic">No claims match this filter.</td></tr>';
     return;
   }
   body.innerHTML = sorted.map(c => {
     const claimed = (c.claimedAmount || 0).toFixed(2);
     const reimb = (c.reimbursedAmount || 0).toFixed(2);
     const nReceipts = (c.receiptIds || []).length;
-    const badge = `<button onclick="advanceClaimStatus('${c.id}')" title="Click to advance status" class="px-2 py-0.5 rounded border text-[9px] font-bold ${statusStyle(c.status)}">${c.status || '—'}</button>`;
+    const badge = `<button onclick="advanceClaimStatus('${c.id}')" title="Click to advance status" class="px-2 py-0.5 rounded border text-[9px] font-bold ${statusStyle(c.status)}">${esc(c.status || '—')}</button>`;
+    const aiBadge = c.enriched ? ' <span title="Enriched with Claude" class="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 rounded font-bold"><i class="fa-solid fa-wand-magic-sparkles"></i></span>' : '';
     return `<tr class="hover:bg-gray-900/40 transition">
+      <td class="py-2.5 px-3 text-center"><input type="checkbox" data-claim-pick value="${esc(c.id)}" class="accent-indigo-500"></td>
       <td class="py-2.5 px-4">
-        <div class="text-xs font-semibold text-slate-200">${c.title || '(untitled)'}</div>
-        <div class="text-[9px] text-slate-500 font-mono">${c.type} ${c.reference ? '· ' + c.reference : ''} ${nReceipts ? '· ' + nReceipts + ' receipt' + (nReceipts > 1 ? 's' : '') : ''}</div>
-        ${c.remark ? `<div class="text-[9px] text-slate-400 italic">“${c.remark}”</div>` : ''}
+        <div class="text-xs font-semibold text-slate-200">${esc(c.title || '(untitled)')}${aiBadge}</div>
+        <div class="text-[9px] text-slate-500 font-mono">${esc(c.type)} ${c.reference ? '· ' + esc(c.reference) : ''} ${nReceipts ? '· ' + nReceipts + ' receipt' + (nReceipts > 1 ? 's' : '') : ''}</div>
+        ${c.remark ? `<div class="text-[9px] text-slate-400 italic">“${esc(c.remark)}”</div>` : ''}
       </td>
       <td class="py-2.5 px-4 font-mono text-[11px] text-slate-400">${c.submittedDate || '—'}</td>
       <td class="py-2.5 px-4 text-right font-mono text-xs text-slate-200">RM ${claimed}</td>
@@ -268,4 +271,102 @@ export function renderClaims() {
   renderClaimsLedger(list);
   renderClaimsDashboard(list);
   renderClaimCharts(list, statusStyle);
+}
+
+// ---------- Claude enrichment : fill a claim from the receipts linked to it ----------
+const CLAIM_EXPORT_TYPE = 'claim-raw-export';
+const CLAIM_IMPORT_TYPE = 'claim-enriched-import';
+
+const CLAIM_INSTRUCTIONS =
+  'You complete reimbursement / insurance / tax-relief claims from the Malaysian receipts linked to them. ' +
+  'For EACH record in "records", read its current fields and its "receipts" (each with merchant, date, total and raw OCR text), and return a record that keeps the SAME "id". ' +
+  'Fill: title (short and descriptive, e.g. \'Klinik Mediviron - fever consultation\'), type (one of "claimTypes"), ' +
+  'claimedAmount (the sum of the linked receipt totals unless the OCR shows a different claimable amount), ' +
+  'periodFrom / periodTo (YYYY-MM-DD, the earliest and latest receipt dates), ' +
+  'reference (invoice / bill / receipt numbers from the OCR, comma-separated), remark (one line on what the claim covers, e.g. diagnosis or items, max 80 characters). ' +
+  'Only give reimbursedAmount if the text explicitly shows an amount already paid out. Never change the status. ' +
+  'Do NOT invent values: omit any field you cannot determine and the current value is kept. ' +
+  'Return ONLY: { "type": "claim-enriched-import", "schemaVersion": 1, "records": [ <one record per input record> ] }.';
+
+// Enriched data is external + untrusted, so escape every string before it hits innerHTML.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function pickedClaimIds() {
+  return [...document.querySelectorAll('#claimsLedgerBody input[data-claim-pick]:checked')].map(cb => cb.value);
+}
+export function toggleAllClaims(master) {
+  document.querySelectorAll('#claimsLedgerBody input[data-claim-pick]').forEach(cb => { cb.checked = master.checked; });
+}
+
+function claimEnrichPayload(scope) {
+  const res = scopeRecords(database.claims || [], scope, pickedClaimIds(), 'claims');
+  if (res.error) return res;
+  const receiptsById = new Map((database.receipts || []).map(r => [r.id, r]));
+  return { payload: {
+    type: CLAIM_EXPORT_TYPE,
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    instructions: CLAIM_INSTRUCTIONS,
+    claimTypes: claimTypes(),
+    targetSchema: { id: '', title: '', type: '', claimedAmount: 0, periodFrom: 'YYYY-MM-DD', periodTo: 'YYYY-MM-DD', reference: '', remark: '' },
+    records: res.records.map(c => ({
+      id: c.id, title: c.title || '', type: c.type || '', status: c.status || '',
+      claimedAmount: c.claimedAmount || 0, reimbursedAmount: c.reimbursedAmount || 0,
+      periodFrom: c.periodFrom || '', periodTo: c.periodTo || '', reference: c.reference || '', remark: c.remark || '',
+      receipts: (c.receiptIds || []).map(id => receiptsById.get(id)).filter(Boolean).map(r => ({
+        merchant: r.merchant || '', date: r.date || '', total: r.total || 0, currency: r.currency || 'MYR',
+        remark: r.remark || '', rawOcr: r.ocrText || '',
+      })),
+    })),
+  } };
+}
+
+export function openClaimEnrichPanel() {
+  openEnrichPanel({
+    title: 'Enrich claims with Claude',
+    defaultScope: pickedClaimIds().length ? 'selected' : 'new',
+    build: claimEnrichPayload,
+    importData: importClaimsEnriched,
+  });
+}
+
+export function exportClaimsRaw() {
+  const { payload, error } = claimEnrichPayload(pickedClaimIds().length ? 'selected' : 'new');
+  if (error) { showToast(error, 'error'); return; }
+  downloadJson(payload, `claims-raw-${new Date().toISOString().slice(0, 10)}.json`);
+  showToast(`Exported ${payload.records.length} claim(s). Give the file to Claude, then import the JSON it returns.`, 'success');
+}
+
+export function handleClaimImportFile(input) { importJsonFile(input, importClaimsEnriched); }
+
+// Status is never touched — it is the user's workflow, not something a receipt can tell us.
+function importClaimsEnriched(data) {
+  if (!data || (data.type && data.type !== CLAIM_IMPORT_TYPE) || !Array.isArray(data.records)) {
+    return { ok: false, message: `Import failed: expected a "${CLAIM_IMPORT_TYPE}" object with a "records" array.` };
+  }
+  const str = v => (v == null ? '' : String(v).trim());
+  const isDate = v => /^\d{4}-\d{2}-\d{2}$/.test(str(v));
+  let updated = 0, unknown = 0;
+  data.records.forEach(rec => {
+    const c = rec && rec.id && (database.claims || []).find(x => x.id === rec.id);
+    if (!c) { unknown++; return; }
+    if (str(rec.title)) c.title = str(rec.title);
+    if (claimTypes().includes(str(rec.type))) c.type = str(rec.type);
+    if (Number(rec.claimedAmount) > 0) c.claimedAmount = Number(rec.claimedAmount);
+    if (Number(rec.reimbursedAmount) > 0) c.reimbursedAmount = Number(rec.reimbursedAmount);
+    if (isDate(rec.periodFrom)) c.periodFrom = str(rec.periodFrom);
+    if (isDate(rec.periodTo)) c.periodTo = str(rec.periodTo);
+    if (str(rec.reference)) c.reference = str(rec.reference);
+    if (str(rec.remark)) c.remark = str(rec.remark);
+    c.enriched = true;
+    updated++;
+  });
+  saveToLocalStorage();
+  renderClaims();
+  let msg = `Imported: ${updated} claim(s) enriched`;
+  if (unknown) msg += ` · ${unknown} unknown id(s) skipped`;
+  return { ok: updated > 0, message: updated ? msg : `${msg} — none of the ids match your claims.` };
 }

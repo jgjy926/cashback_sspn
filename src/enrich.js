@@ -1,4 +1,4 @@
-// Claude enrichment round-trip shared by the Medical and Vehicle tabs.
+// Claude enrichment round-trip shared by the Medical, Vehicle, Receipts and Claims tabs.
 //
 // Two pieces:
 //  - parseEnrichedJson(): a forgiving parser for what Claude pastes back. Chat replies
@@ -211,4 +211,50 @@ export function openEnrichPanel({ title, defaultScope, build, importData }) {
 
   setScope(defaultScope);
   replyEl.focus();
+}
+
+// ---------- file round-trip (the same payload, as a downloadable / importable file) ----------
+
+export function downloadJson(obj, filename) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+// Read the JSON file picked in `input` and hand it to importData(data) -> { ok, message }.
+export function importJsonFile(input, importData) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    input.value = '';
+    let data;
+    try { data = normalizeEnriched(parseEnrichedJson(reader.result)); }
+    catch (err) { showToast(`Import failed: ${err.message}`, 'error'); return; }
+    const res = importData(data);
+    showToast(res.message, res.ok ? 'success' : 'error');
+  };
+  reader.onerror = () => { showToast('Could not read the file.', 'error'); input.value = ''; };
+  reader.readAsText(file);
+}
+
+// Pick the records for a scope: 'selected' (ticked ids), 'new' (not enriched) or 'all'.
+// Returns { records } or { error }. `noun` is used in the messages ("receipts", "claims").
+export function scopeRecords(all, scope, pickedIds, noun) {
+  let src;
+  if (scope === 'selected') {
+    const ids = new Set(pickedIds);
+    if (!ids.size) return { error: `Tick the ${noun} you want to enrich first (checkboxes on the left).` };
+    src = all.filter(r => ids.has(r.id));
+  } else if (scope === 'all') {
+    src = all;
+  } else {
+    src = all.filter(r => !r.enriched);
+    if (!src.length && all.length) return { error: `Nothing new to enrich — every one of your ${noun} is already enriched. Use “Selected” or “All”.` };
+  }
+  if (!src.length) return { error: `No ${noun} to enrich yet.` };
+  return { records: src };
 }

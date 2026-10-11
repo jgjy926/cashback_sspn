@@ -31,7 +31,9 @@ src/                 ES modules (no build step — served as-is)
   config.js          gateway URL + token accessor
   sync.js            cloud push/pull with version-based conflict detection
   ocr.js             client-side image compression + OCR call + field parsing
-  receipts.js        receipt capture/upload/list, ledger linking
+  receipts.js        receipt capture/upload/list, ledger linking; Claude enrich -> syncs ledger tx + claim
+  claims.js          claim tracker; Claude enrich fills title/amount/period/reference from linked receipts
+  enrich.js          shared Claude copy/paste panel, forgiving JSON parse, file export/import helpers
   medical.js         Medicine & Records: OCR -> export JSON -> enrich in Claude -> import
   vehicle.js         Vehicle & Transport: same enrichment flow, per-vehicle running costs
   calc, dashboard, transactions, cards, optimizer, sspn, savings, charts, excel, ui, dropdowns
