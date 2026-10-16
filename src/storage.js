@@ -1,6 +1,6 @@
 import { database, setDatabase, SCHEMA_VERSION } from './state.js';
 import { showToast } from './ui.js';
-import { SYNCED_COLLECTIONS, recordContentEqual } from './merge.js';
+import { SYNCED_COLLECTIONS, recordContentEqual, stableStringify } from './merge.js';
 
 // Persistent per-browser id, used for cross-device sync conflict detection.
 export function getDeviceId() {
@@ -120,6 +120,17 @@ function stampChangesAndTombstones() {
       else database.deletions.push({ coll, id, at: now, by });
     }
   }
+
+  // Settings: stamp each key whose value actually changed since the last save, so
+  // sync can merge settings per key (merge.js mergeSettings). Keys that only just
+  // appeared (schema backfill) are not user edits and stay unstamped.
+  if (prev && prev.settings && database.settings) {
+    if (!database.settingsStamps || typeof database.settingsStamps !== 'object') database.settingsStamps = {};
+    for (const key of Object.keys(database.settings)) {
+      if (!(key in prev.settings)) continue;
+      if (stableStringify(prev.settings[key]) !== stableStringify(database.settings[key])) database.settingsStamps[key] = now;
+    }
+  }
 }
 
 // Mutation save: maintain per-record sync metadata, stamp a new local version +
@@ -140,7 +151,10 @@ export function loadFromLocalStorage() {
   if (data) {
     try {
       const parsed = JSON.parse(data);
-      if (parsed.transactions) setDatabase(migrate(parsed));
+      if (parsed.transactions) {
+        setDatabase(migrate(parsed));
+        persist(); // snapshot the migrated shape so backfilled defaults never read as user edits
+      }
     } catch (e) { console.error('Data parameters corrupted.', e); }
   }
   ensureMeta();

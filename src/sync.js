@@ -1,6 +1,6 @@
 import { refreshLedgerAndCalculations } from './dashboard.js';
 import { populateDropdownOptions } from './dropdowns.js';
-import { database, setDatabase } from './state.js';
+import { database, setDatabase, DEFAULT_SETTINGS } from './state.js';
 import { ensureMeta, migrate, persist } from './storage.js';
 import { showToast, switchTab } from './ui.js';
 import { gatewayConfig } from './config.js';
@@ -102,7 +102,7 @@ async function syncNow({ silent = true, manual = false } = {}) {
 
       ensureMeta();
       const localSig = contentSignature(database);
-      const merged = remoteDb ? mergeLedgers(database, remoteDb) : JSON.parse(JSON.stringify(database));
+      const merged = remoteDb ? mergeLedgers(database, remoteDb, Date.now(), { defaultSettings: DEFAULT_SETTINGS }) : JSON.parse(JSON.stringify(database));
       const mergedSig = contentSignature(merged);
       const remoteSig = remoteDb ? contentSignature(remoteDb) : null;
 

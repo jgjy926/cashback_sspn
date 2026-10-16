@@ -149,6 +149,11 @@ export let database = {
             }
         };
 
+// Pristine copy of the shipped default settings (taken before anything can mutate
+// the seed). Sync uses it to tell "never customised" apart from a user's choice, so
+// a fresh install's defaults can't overwrite settings already in the cloud.
+export const DEFAULT_SETTINGS = JSON.parse(JSON.stringify(database.settings));
+
 export function setDatabase(next) { database = next; }
 
 export let currentFilterCard = "ALL";
