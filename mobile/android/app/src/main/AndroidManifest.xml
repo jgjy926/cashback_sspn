@@ -38,4 +38,14 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Android 11+ package visibility: lets the WebView find the camera app for
+         <input capture>. Without it Capacitor falls back to the generic file picker.
+         No CAMERA permission is declared on purpose: the camera app takes the photo,
+         so none is needed (declaring it would force a runtime permission prompt). -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
 </manifest>

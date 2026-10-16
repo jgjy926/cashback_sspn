@@ -17,7 +17,7 @@
     <header class="sticky top-0 z-40 glass-card bg-opacity-90 border-b border-gray-800/80 backdrop-blur-md px-6 py-3.5">
         <div class="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <!-- Brand -->
-            <div class="flex items-center justify-between w-full lg:w-auto">
+            <div class="flex items-center justify-between w-full lg:w-auto lg:shrink-0">
                 <div class="flex items-center gap-3">
                     <div class="h-10 w-10 bg-gradient-to-tr from-indigo-500 via-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/15">
                         <i class="fa-solid fa-wallet text-white text-lg font-bold"></i>
@@ -34,8 +34,8 @@
             </div>
 
             <!-- Navigation Links -->
-            <div id="navigationWrapper" class="hidden lg:flex flex-col lg:flex-row items-stretch lg:items-center justify-center gap-3 w-full lg:w-auto mt-2 lg:mt-0">
-                <nav class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-1.5 bg-gray-950 p-1.5 rounded-xl border border-gray-800/95">
+            <div id="navigationWrapper" class="hidden lg:flex flex-col lg:flex-row items-stretch lg:items-center justify-center gap-3 w-full lg:w-auto min-w-0 mt-2 lg:mt-0">
+                <nav class="flex flex-col sm:flex-row sm:flex-wrap min-w-0 items-stretch sm:items-center justify-center gap-1.5 bg-gray-950 p-1.5 rounded-xl border border-gray-800/95">
                     <button onclick="switchTab('dashboard')" id="tabBtn-dashboard" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 bg-indigo-600 text-white shadow-md text-left sm:text-center">
                         <i class="fa-solid fa-chart-pie mr-1.5"></i>CC Dashboard
                     </button>
@@ -869,12 +869,22 @@
                     <p class="text-[10px] text-slate-500 mt-0.5">Capture with your phone camera. The image is compressed (&lt; 1 MB), read by OCR through your gateway, then stored in Koofr — only a reference is kept in the ledger.</p>
                 </div>
 
-                <label for="receiptFile" class="flex flex-col items-center justify-center gap-2 cursor-pointer bg-gray-950 border border-dashed border-gray-700 hover:border-indigo-500 rounded-xl py-8 transition">
-                    <i class="fa-solid fa-camera text-2xl text-indigo-400"></i>
-                    <span class="text-xs font-semibold text-slate-300">Take photo(s) / choose image(s)</span>
-                    <span class="text-[10px] text-slate-500">Camera or gallery · add several for a medical visit</span>
-                    <input type="file" id="receiptFile" accept="image/*" multiple onchange="handleReceiptFile(this)" class="hidden">
-                </label>
+                <!-- Two inputs: `capture` makes phones (and the Android app) open the camera
+                     directly; without it Android only offers a file picker. Both append. -->
+                <div class="grid grid-cols-2 gap-3">
+                    <label for="receiptCamera" class="flex flex-col items-center justify-center gap-2 cursor-pointer bg-gray-950 border border-dashed border-gray-700 hover:border-indigo-500 rounded-xl py-7 transition">
+                        <i class="fa-solid fa-camera text-2xl text-indigo-400"></i>
+                        <span class="text-xs font-semibold text-slate-300">Take photo</span>
+                        <span class="text-[10px] text-slate-500 text-center px-2">Tap again for more pages</span>
+                        <input type="file" id="receiptCamera" accept="image/*" capture="environment" onchange="handleReceiptFile(this)" class="hidden">
+                    </label>
+                    <label for="receiptFile" class="flex flex-col items-center justify-center gap-2 cursor-pointer bg-gray-950 border border-dashed border-gray-700 hover:border-indigo-500 rounded-xl py-7 transition">
+                        <i class="fa-solid fa-images text-2xl text-indigo-400"></i>
+                        <span class="text-xs font-semibold text-slate-300">Gallery</span>
+                        <span class="text-[10px] text-slate-500 text-center px-2">Pick one or several</span>
+                        <input type="file" id="receiptFile" accept="image/*" multiple onchange="handleReceiptFile(this)" class="hidden">
+                    </label>
+                </div>
 
                 <label class="flex items-center justify-center gap-2 text-[10px] text-slate-400 cursor-pointer select-none">
                     <input type="checkbox" id="aiReviewToggle" checked onchange="setAiReview(this.checked)" class="accent-indigo-500">
@@ -885,7 +895,11 @@
                     <img id="receiptPreview" alt="Receipt preview" class="max-h-64 mx-auto rounded-xl border border-gray-800">
                     <p id="receiptSizeInfo" class="text-[10px] text-center text-slate-500 font-mono"></p>
                     <div id="receiptThumbs" class="flex flex-wrap gap-2 justify-center"></div>
-                    <label for="receiptFile" class="block text-center text-[10px] text-indigo-400 hover:text-indigo-300 cursor-pointer font-semibold"><i class="fa-solid fa-plus mr-1"></i>Add another photo</label>
+                    <div class="flex items-center justify-center gap-4 text-[10px] font-semibold">
+                        <span class="text-slate-500">Add another photo:</span>
+                        <label for="receiptCamera" class="text-indigo-400 hover:text-indigo-300 cursor-pointer"><i class="fa-solid fa-camera mr-1"></i>Camera</label>
+                        <label for="receiptFile" class="text-indigo-400 hover:text-indigo-300 cursor-pointer"><i class="fa-solid fa-images mr-1"></i>Gallery</label>
+                    </div>
                     <button type="button" onclick="runReceiptOcr()" id="receiptScanBtn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition flex items-center justify-center gap-2">
                         <i class="fa-solid fa-wand-magic-sparkles"></i>Scan with OCR
                     </button>
@@ -1787,7 +1801,7 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.10.16-5';
+      window.APP_VERSION = '2026.10.16-8';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','merge','dashboard','dropdowns',

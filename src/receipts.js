@@ -390,7 +390,7 @@ export async function saveReceipt(e) {
   form.hidden = true;
   document.getElementById('receiptPreviewWrap').hidden = true;
   document.getElementById('receiptThumbs').innerHTML = '';
-  document.getElementById('receiptFile').value = '';
+  for (const id of ['receiptFile', 'receiptCamera']) { const el = document.getElementById(id); if (el) el.value = ''; }
   document.getElementById('receiptOcrStatus').innerText = '';
   document.getElementById('recVehicleFields').classList.add('hidden');
   const dest = [txId && 'ledger', claimId && 'claims', medId && 'medical records', vehId && 'vehicle'].filter(Boolean).join(' & ');
