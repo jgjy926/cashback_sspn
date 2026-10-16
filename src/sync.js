@@ -66,6 +66,7 @@ function adoptMerged(merged) {
 // ---- convergent sync core -------------------------------------------------
 
 let syncing = false;
+let rerunQueued = false;
 
 // One convergent sync pass replaces the old push *and* pull: pull the cloud copy,
 // merge it with local (no record ever lost), adopt the result if it changed our
@@ -78,7 +79,9 @@ async function syncNow({ silent = true, manual = false } = {}) {
     if (manual) { showToast('Missing gateway URL or access token.', 'error'); switchTab('koofrSync'); }
     return false;
   }
-  if (syncing) return false;
+  // A pass is already running: it may have pulled before this caller's edit, so
+  // queue one follow-up pass instead of dropping the request.
+  if (syncing) { rerunQueued = true; return false; }
   syncing = true;
   setSyncStatus('syncing');
 
@@ -135,6 +138,10 @@ async function syncNow({ silent = true, manual = false } = {}) {
     return false;
   } finally {
     syncing = false;
+    if (rerunQueued) {
+      rerunQueued = false;
+      setTimeout(() => syncNow({ silent: true }), 0);
+    }
   }
 }
 

@@ -8,6 +8,7 @@ import { showToast } from './ui.js';
 import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant,
   aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD, AI_FIELD_CEILING } from './ocr.js';
 import { gatewayConfig } from './config.js';
+import { openImageViewer } from './mobile.js';
 import { openEnrichPanel, downloadJson, importJsonFile, scopeRecords } from './enrich.js';
 
 // Multi-photo capture. `pendingPhotos[0]` is the PRIMARY photo used by the existing receipt /
@@ -467,8 +468,7 @@ export async function viewReceipt(id) {
     const res = await fetch(`${base}/receipt/${id}`, { headers: { Authorization: 'Bearer ' + token } });
     if (!res.ok) throw new Error(`Not found (${res.status})`);
     const url = URL.createObjectURL(await res.blob());
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    openImageViewer(url, () => URL.revokeObjectURL(url));
   } catch (err) {
     showToast(`Could not load receipt: ${err.message}`, 'error');
   }

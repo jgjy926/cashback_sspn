@@ -76,3 +76,15 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #6366f1;
         }
+
+        /* Phones: never let a stray wide element widen the page past the screen
+           (wide tables already scroll inside their own overflow-x-auto wrappers). */
+        html, body { max-width: 100%; overflow-x: clip; }
+        img, canvas, video { max-width: 100%; }
+
+        /* Edge-to-edge (Android app builds set viewport-fit=cover): keep the sticky
+           header clear of the status bar / camera cutout and the page clear of the
+           gesture bar. env() is 0 everywhere else, so the web layout is unchanged. */
+        header.sticky { padding-top: calc(0.875rem + env(safe-area-inset-top, 0px)); }
+        body.pb-12 { padding-bottom: calc(3rem + env(safe-area-inset-bottom, 0px)); }
+        #imageViewerModal > button { top: calc(0.75rem + env(safe-area-inset-top, 0px)); }

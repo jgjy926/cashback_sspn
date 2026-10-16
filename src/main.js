@@ -19,6 +19,7 @@ import * as vehicle from './vehicle.js';
 import * as savings from './savings.js';
 import * as autosync from './autosync.js';
 import * as statement from './statement.js';
+import * as mobile from './mobile.js';
 import { loadFromLocalStorage } from './storage.js';
 import { initDatePickers } from './ui.js';
 import { populateDropdownOptions } from './dropdowns.js';
@@ -29,8 +30,9 @@ import { renderMedical } from './medical.js';
 import { renderVehicle } from './vehicle.js';
 import { renderSavings } from './savings.js';
 import { initAutoSync } from './autosync.js';
+import { initMobile } from './mobile.js';
 
-Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts, claims, medical, vehicle, savings, autosync, statement);
+Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts, claims, medical, vehicle, savings, autosync, statement, mobile);
 
 window.addEventListener('load', () => {
   // Show which deploy this device is running (APP_VERSION in index.html), so a stale cache is easy to spot.
@@ -47,4 +49,5 @@ window.addEventListener('load', () => {
   renderVehicle();
   renderSavings();
   initAutoSync();                // pull on open + auto-push on change + periodic refresh
+  initMobile();                  // flush on background, re-sync on resume/online, Android Back button
 });

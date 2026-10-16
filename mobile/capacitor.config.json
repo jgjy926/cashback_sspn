@@ -1,0 +1,20 @@
+{
+  "appId": "io.github.jgjy926.cashbacksspn",
+  "appName": "CC Cashback & SSPN",
+  "webDir": "www",
+  "backgroundColor": "#030712",
+  "zoomEnabled": true,
+  "server": {
+    "androidScheme": "https",
+    "hostname": "jgjy926.github.io"
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "style": "DARK"
+    }
+  }
+}

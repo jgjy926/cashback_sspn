@@ -45,6 +45,15 @@ export function scheduleAutoPush() {
   }, PUSH_DEBOUNCE_MS);
 }
 
+// Run a pending debounced push right now (the page is being hidden/backgrounded,
+// where timers freeze and the push would otherwise wait until the app is reopened).
+export function flushAutoPush() {
+  if (!pushTimer) return;
+  clearTimeout(pushTimer);
+  pushTimer = null;
+  syncNow({ silent: true });
+}
+
 // Periodic convergent sync so another device's edits are merged in even while idle.
 // Merge means this is always safe: local edits are never discarded, only reconciled.
 export async function autoSyncTick() {

@@ -36,7 +36,10 @@ src/                 ES modules (no build step — served as-is)
   enrich.js          shared Claude copy/paste panel, forgiving JSON parse, file export/import helpers
   medical.js         Medicine & Records: OCR -> export JSON -> enrich in Claude -> import
   vehicle.js         Vehicle & Transport: same enrichment flow, per-vehicle running costs
+  mobile.js          phone lifecycle: flush sync on background, re-sync on resume/online,
+                     Android Back button, in-app image viewer, native file export
   calc, dashboard, transactions, cards, optimizer, sspn, savings, charts, excel, ui, dropdowns
+mobile/              Android app (Capacitor) wrapping the same files — see "Android app"
 worker/
   worker.js          Cloudflare Worker (routed, authenticated gateway)
   wrangler.toml      config + secret documentation
@@ -89,6 +92,36 @@ Open the app → **Koofr Sync** tab → enter:
 - **Access Token**: the same string you set as `APP_TOKEN`.
 
 Save. Use **Sync** (push) / **Load** (pull) in the header, and the **Receipts** tab to scan.
+
+### 4. Android app (optional)
+
+`mobile/` wraps the **same** `index.html` + `src/` + `styles/` in a Capacitor WebView — no
+forked code, so the web app and the phone app always have the same features. The build copies
+those files into `mobile/www`, vendors the CDN libraries (boots offline), and enables pinch-zoom
+and edge-to-edge dark system bars.
+
+- **Worker / CORS**: the app is served from `https://jgjy926.github.io` inside the WebView
+  (`server.hostname` in `mobile/capacitor.config.json`), so the Worker's existing
+  `ALLOWED_ORIGIN` accepts it — no Worker change or redeploy. If the Pages origin ever changes,
+  change it in both places.
+- **Gateway settings**: enter the Worker URL + token once in the app's Koofr Sync tab, or put
+  `{ "endpoint": "...", "token": "..." }` in `mobile/gateway.local.json` (gitignored) to pre-fill
+  them at build time. An APK built with that file contains the token — don't share it.
+- **Uninterrupted sync**: pending edits are pushed the moment the app is backgrounded, and a
+  convergent sync runs on resume and when the network returns (`src/mobile.js`).
+- **Back button**: closes the image viewer / open modal → nav menu → returns to Dashboard →
+  backgrounds the app (never kills it mid-sync). Exports (JSON, Excel) open the share sheet.
+
+Build (needs Android Studio for its JDK + Android SDK):
+```bash
+cd mobile
+npm install
+# PowerShell: $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+npm run android:apk
+# -> mobile/android/app/build/outputs/apk/debug/app-debug.apk
+```
+Rebuild after any web change (bump `APP_VERSION` as usual). Copy the APK to the phone and open
+it (allow "install unknown apps" for your file manager).
 
 ## Receipt flow
 

@@ -10,3 +10,10 @@ data/
 
 # Claude Code agent memory notes — local only, not part of the app.
 memory/
+
+# Android app (mobile/): generated bundle, download cache, local gateway secrets, builds
+mobile/www/
+mobile/.vendor-cache/
+mobile/gateway.local.json
+*.apk
+*.aab
