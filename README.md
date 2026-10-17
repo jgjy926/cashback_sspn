@@ -120,6 +120,10 @@ npm install
 npm run android:apk
 # -> mobile/android/app/build/outputs/apk/debug/app-debug.apk
 ```
+Icons (launcher, Android 13 themed icon, splash, web favicon/touch icon, header logo) are all
+generated from one design by `python mobile/scripts/make-icons.py` — edit the script, not the
+output files.
+
 Rebuild after any web change (bump `APP_VERSION` as usual). Copy the APK to the phone and open
 it (allow "install unknown apps" for your file manager).
 

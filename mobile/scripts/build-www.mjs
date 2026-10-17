@@ -84,7 +84,7 @@ async function gatewaySeed(html) {
 
 await rm(www, { recursive: true, force: true });
 await mkdir(www, { recursive: true });
-for (const dir of ['src', 'styles']) await cp(join(repo, dir), join(www, dir), { recursive: true });
+for (const dir of ['src', 'styles', 'icons']) await cp(join(repo, dir), join(www, dir), { recursive: true });
 
 let html = await readFile(join(repo, 'index.html'), 'utf8');
 // Draw edge-to-edge under the (dark) system bars; styles/app.css pads the sticky
