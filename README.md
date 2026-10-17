@@ -168,6 +168,34 @@ Optional extras, all blank-by-default: odometer (drives distance + cost/km), nex
 mileage, road tax / insurance expiry, and part warranty — the ones that fall due within 60 days
 (or 1,000 km) surface as a banner at the top of the tab.
 
+The ledger keeps each record's breakdown (labour, parts, reminders, remark) **collapsed** so the
+list stays readable on a phone: tap a row's items chip to open it, or **Expand all / Collapse
+all** in the header. Open rows survive filter changes and syncs for the session. On phones the
+Category, Odometer and Items columns are hidden (they're still shown in the expanded detail).
+
+## Dining
+
+Same zero-cost flow as Vehicle, for meals out. In the **Receipts** tab tick **Record into
+Dining**; the meal type defaults to *Auto* (guessed from the time printed on the receipt —
+Breakfast / Lunch / Tea / Dinner / Supper) and pax is optional. The record lands in the
+**Dining** tab as *Raw* with the photos and OCR text, seeded with the receipt's total.
+
+Break the bill into dishes whenever you like — the **Claude copy/paste** panel (ticked meals,
+else the ones not yet broken down: copy the prompt, paste Claude's reply back), or
+**Export** (Selected / New / All) → Claude → **Import JSON** (matched by `id`) — or type the
+dishes in by hand. Each meal holds dishes (name, qty, amount) plus service charge, tax and
+discount; if Σ dishes + service + tax − discount drifts from the amount paid by more than
+RM 0.05 (5-sen rounding), the row is flagged. The **amount paid** is what every total uses.
+
+The tab shows spend, meal count and per-pax cost, most-ordered dishes, top restaurants, and
+charts by month and by meal type, with Year / Month / Meal / search filters. Rows are collapsed
+like Vehicle — tap a meal's chip to see the dishes. Meal types are editable in **System Setup**
+(they're the only values an enrichment may assign). `diningRecords` sync across devices like the
+other record types.
+
+As with Vehicle, "Log to credit-card ledger" is an independent tick, cross-linked by `txId`;
+Dining totals count only dining records, so nothing is double counted.
+
 The AI review is **gated** (only fires on low-confidence scans), **text-only** (no
 image re-upload, so it ignores the 1 MB OCR cap), and can be toggled off per device
 from the Receipts tab. It runs on Cloudflare Workers AI's free daily Neuron allowance,
