@@ -36,6 +36,8 @@ src/                 ES modules (no build step — served as-is)
   enrich.js          shared Claude copy/paste panel, forgiving JSON parse, file export/import helpers
   medical.js         Medicine & Records: OCR -> export JSON -> enrich in Claude -> import
   vehicle.js         Vehicle & Transport: same enrichment flow, per-vehicle running costs
+  dining.js          Dining: meals out + the dishes ordered (Claude breaks the receipt into dishes),
+                     most-ordered dishes, top restaurants, spend by month / meal type
   mobile.js          phone lifecycle: flush sync on background, re-sync on resume/online,
                      Android Back button, in-app image viewer, native file export
   calc, dashboard, transactions, cards, optimizer, sspn, savings, charts, excel, ui, dropdowns

@@ -337,43 +337,78 @@ function statusBadges(r) {
   return badges.join(' ');
 }
 
+// Per-record breakdown (labour, parts, reminders, remark) is collapsed by default so the list
+// stays compact on a phone; tap a row's "details" chip — or "Expand all" — to open it.
+// Open rows are remembered across re-renders (filter changes, sync) for this session.
+const openVehicleRows = new Set();
+let vehicleExpandAll = false;
+
+export function toggleVehicleDetails(id) {
+  if (openVehicleRows.has(id)) openVehicleRows.delete(id); else openVehicleRows.add(id);
+  const det = document.getElementById('vehDet-' + id);
+  const chev = document.getElementById('vehChev-' + id);
+  const open = openVehicleRows.has(id) || vehicleExpandAll;
+  if (det) det.classList.toggle('hidden', !open);
+  if (chev) chev.classList.toggle('rotate-90', open);
+}
+
+export function toggleVehicleExpandAll() {
+  vehicleExpandAll = !vehicleExpandAll;
+  if (!vehicleExpandAll) openVehicleRows.clear();
+  renderVehicle();
+}
+
 function renderVehicleLedger(list) {
   const body = document.getElementById('vehLedgerBody');
   if (!body) return;
+  const allBtn = document.getElementById('vehExpandAllBtn');
+  if (allBtn) allBtn.innerHTML = vehicleExpandAll
+    ? '<i class="fa-solid fa-angles-up mr-1"></i>Collapse all'
+    : '<i class="fa-solid fa-angles-down mr-1"></i>Expand all';
   if (!list.length) {
     body.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-xs text-slate-500 italic">No vehicle records for this filter.</td></tr>';
     return;
   }
   body.innerHTML = list.map(r => {
-    const partLines = (r.items || []).length
-      ? `<div class="text-[9px] text-slate-500 mt-0.5 space-y-0.5">${(r.items || []).map(i =>
-        `<div><i class="fa-solid fa-gear mr-1 text-slate-600"></i>${esc(i.name || '(unnamed)')}${i.qty ? ` ×${esc(i.qty)}` : ''} — ${esc(r.currency || 'MYR')} ${fmt(i.amount)}</div>`).join('')}</div>`
+    const cur = esc(r.currency || 'MYR');
+    const items = r.items || [];
+    const partLines = items.length
+      ? `<div class="space-y-0.5">${items.map(i =>
+        `<div class="flex justify-between gap-3"><span class="min-w-0"><i class="fa-solid fa-gear mr-1 text-slate-600"></i>${esc(i.name || '(unnamed)')}${i.qty ? ` ×${esc(i.qty)}` : ''}</span><span class="font-mono shrink-0">${cur} ${fmt(i.amount)}</span></div>`).join('')}</div>`
       : '';
     const labour = num(r.labour)
-      ? `<div class="text-[9px] text-slate-500 mt-0.5"><i class="fa-solid fa-screwdriver-wrench mr-1 text-slate-600"></i>Labour — ${esc(r.currency || 'MYR')} ${fmt(r.labour)}</div>` : '';
+      ? `<div class="flex justify-between gap-3"><span><i class="fa-solid fa-screwdriver-wrench mr-1 text-slate-600"></i>Labour</span><span class="font-mono shrink-0">${cur} ${fmt(r.labour)}</span></div>` : '';
     const notes = [];
     if (num(r.odometer)) notes.push(`${num(r.odometer).toLocaleString('en-MY')} km`);
     if (r.nextServiceDate) notes.push(`next service ${esc(r.nextServiceDate)}`);
     if (num(r.nextServiceKm)) notes.push(`next service @ ${num(r.nextServiceKm).toLocaleString('en-MY')} km`);
     if (r.expiryDate) notes.push(`expires ${esc(r.expiryDate)}`);
     if (r.warrantyUntil) notes.push(`warranty to ${esc(r.warrantyUntil)}`);
-    const noteLine = notes.length ? `<div class="text-[9px] text-slate-500 mt-0.5"><i class="fa-solid fa-circle-info mr-1 text-slate-600"></i>${notes.join(' · ')}</div>` : '';
-    const remark = r.remark ? `<div class="text-[9px] text-slate-400 italic">“${esc(r.remark)}”</div>` : '';
+    const noteLine = notes.length ? `<div><i class="fa-solid fa-circle-info mr-1 text-slate-600"></i>${notes.join(' · ')}</div>` : '';
+    const remark = r.remark ? `<div class="text-slate-400 italic">“${esc(r.remark)}”</div>` : '';
+    const hasDetails = !!(labour || partLines || noteLine || remark);
+    const open = vehicleExpandAll || openVehicleRows.has(r.id);
+    const chipLabel = items.length ? `${items.length} item${items.length > 1 ? 's' : ''}` : 'Details';
+    const toggle = hasDetails
+      ? `<button type="button" onclick="toggleVehicleDetails('${esc(r.id)}')" class="mt-1 inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-indigo-400 hover:text-indigo-300">
+          <i id="vehChev-${esc(r.id)}" class="fa-solid fa-chevron-right transition-transform ${open ? 'rotate-90' : ''}"></i>${chipLabel}</button>` : '';
+    const details = hasDetails
+      ? `<div id="vehDet-${esc(r.id)}" class="${open ? '' : 'hidden'} mt-1.5 text-[10px] text-slate-500 space-y-0.5 bg-gray-950/60 border border-gray-800/80 rounded-lg px-2.5 py-2">${labour}${partLines}${noteLine}${remark}</div>` : '';
     const view = (r.imagePaths || []).length
       ? `<button onclick="viewVehiclePhotos('${esc(r.id)}')" class="text-indigo-400 hover:text-indigo-300 p-1" title="View photos"><i class="fa-solid fa-images"></i></button>` : '';
     return `<tr class="hover:bg-gray-900/40 transition align-top">
-      <td class="py-2.5 px-3 text-center"><input type="checkbox" data-veh-pick value="${esc(r.id)}" class="accent-indigo-500"></td>
-      <td class="py-2.5 px-4">
+      <td class="py-2.5 px-2 sm:px-3 text-center"><input type="checkbox" data-veh-pick value="${esc(r.id)}" class="accent-indigo-500"></td>
+      <td class="py-2.5 px-2 sm:px-4">
         <div class="text-xs font-semibold text-slate-200 flex items-center gap-1.5 flex-wrap">${esc(r.merchant || '(no workshop)')} ${statusBadges(r)}</div>
-        <div class="text-[9px] text-slate-500 font-mono">${esc(r.date || '—')} · ${esc(vehicleLabel(r.vehicleId))}</div>
-        ${labour}${partLines}${noteLine}${remark}
+        <div class="text-[9px] text-slate-500 font-mono">${esc(r.date || '—')} · ${esc(vehicleLabel(r.vehicleId))}<span class="sm:hidden"> · ${esc(r.category || '—')}</span></div>
+        ${toggle}${details}
       </td>
-      <td class="py-2.5 px-4 text-[10px] text-slate-300">${esc(r.category || '—')}</td>
-      <td class="py-2.5 px-4 text-right font-mono text-[11px] text-slate-400">${num(r.odometer) ? num(r.odometer).toLocaleString('en-MY') : '—'}</td>
-      <td class="py-2.5 px-4 text-right font-mono text-xs font-bold text-slate-100">${esc(r.currency || 'MYR')} ${fmt(recordTotal(r))}</td>
-      <td class="py-2.5 px-4 text-center text-[11px] text-slate-400">${(r.items || []).length}</td>
-      <td class="py-2.5 px-4 text-center">
-        <div class="flex gap-1 justify-center">
+      <td class="hidden sm:table-cell py-2.5 px-4 text-[10px] text-slate-300">${esc(r.category || '—')}</td>
+      <td class="hidden md:table-cell py-2.5 px-4 text-right font-mono text-[11px] text-slate-400">${num(r.odometer) ? num(r.odometer).toLocaleString('en-MY') : '—'}</td>
+      <td class="py-2.5 px-2 sm:px-4 text-right font-mono text-xs font-bold text-slate-100 whitespace-nowrap">${cur} ${fmt(recordTotal(r))}</td>
+      <td class="hidden md:table-cell py-2.5 px-4 text-center text-[11px] text-slate-400">${items.length}</td>
+      <td class="py-2.5 px-1 sm:px-4 text-center">
+        <div class="flex flex-col sm:flex-row gap-0.5 sm:gap-1 justify-center items-center">
           ${view}
           <button onclick="openVehicleModal('${esc(r.id)}')" class="text-indigo-400 hover:text-indigo-300 p-1" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
           <button onclick="deleteVehicleRecord('${esc(r.id)}')" class="text-rose-500 hover:text-rose-400 p-1" title="Delete"><i class="fa-solid fa-trash"></i></button>

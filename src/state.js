@@ -12,6 +12,8 @@ export let database = {
             // `vehicleRecords` are the bills — service, repair, fuel, road tax, insurance…
             vehicles: [],
             vehicleRecords: [],
+            // Meals out, with the dishes ordered (items) — enriched from receipt OCR via Claude.
+            diningRecords: [],
             // Saving-account interest ledger. Only user-actualised months are stored
             // here (status:'actual', locked). Forecast months are computed on the fly
             // from settings.savingsConfig so they can never drift out of sync.
@@ -121,6 +123,8 @@ export let database = {
                 paymentMethods: ["Touch 'n Go eWallet", "GrabPay", "Boost", "ShopeePay", "DuitNow QR", "Cash", "Bank Transfer"],
                 // Vehicle expense categories (editable in System Setup) — drive the Vehicle tab
                 // pickers and are the only values an AI enrichment is allowed to assign.
+                // Dining meal types (editable in System Setup) — the only values an AI enrichment may assign.
+                diningMealTypes: ["Breakfast", "Lunch", "Dinner", "Supper", "Tea / Café", "Delivery", "Other"],
                 vehicleCategories: ["Service", "Repair", "Tyre", "Battery", "Insurance", "Road Tax", "Fuel", "Toll", "Parking", "Summons", "Accessory", "Other"],
                 // Saving-account interest forecast configuration. Drives the "Interest
                 // (Saving Acc)" tab. Forecast rows are generated from this; actualised

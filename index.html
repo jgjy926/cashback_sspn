@@ -70,6 +70,9 @@
                     <button onclick="switchTab('vehicle')" id="tabBtn-vehicle" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
                         <i class="fa-solid fa-car mr-1.5"></i>Vehicle
                     </button>
+                    <button onclick="switchTab('dining')" id="tabBtn-dining" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
+                        <i class="fa-solid fa-utensils mr-1.5"></i>Dining
+                    </button>
                     <button onclick="switchTab('koofrSync')" id="tabBtn-koofrSync" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold tracking-wider transition-all duration-200 text-slate-400 hover:text-slate-100 text-left sm:text-center">
                         <i class="fa-solid fa-cloud mr-1.5"></i>Koofr Sync
                     </button>
@@ -818,6 +821,10 @@
                                 <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Vehicle Expense Categories (Comma separated)</label>
                                 <input type="text" id="settingsVehicleCategories" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono" placeholder="Service, Repair, Tyre, Battery, Insurance, Road Tax, Fuel, Toll, Parking">
                             </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Dining Meal Types (Comma separated)</label>
+                                <input type="text" id="settingsDiningMealTypes" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 font-mono" placeholder="Breakfast, Lunch, Dinner, Supper, Tea / Café, Delivery, Other">
+                            </div>
                             <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-xl text-xs uppercase tracking-wider transition">
                                 Apply Settings
                             </button>
@@ -992,6 +999,23 @@
                             <div>
                                 <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Odometer km (optional)</label>
                                 <input type="number" step="1" id="recOdometer" placeholder="e.g. 85210" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-500">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-950 border border-gray-800/80 rounded-xl p-3 space-y-3">
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="recLogDining" onchange="recLogDiningChange()" class="w-4 h-4 rounded border-gray-800 text-orange-500 bg-gray-950 focus:ring-orange-500 cursor-pointer">
+                            <label for="recLogDining" class="text-xs font-semibold text-slate-300 cursor-pointer">Record into Dining — restaurant / café bill; Claude breaks it down into the dishes ordered</label>
+                        </div>
+                        <div id="recDiningFields" class="hidden grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Meal</label>
+                                <select id="recDiningMeal" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500"></select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Pax (optional)</label>
+                                <input type="number" step="1" min="0" inputmode="numeric" id="recDiningPax" placeholder="e.g. 2" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500">
                             </div>
                         </div>
                     </div>
@@ -1326,22 +1350,25 @@
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-2 glass-card rounded-2xl p-6 space-y-3">
-                    <div class="border-b border-gray-800 pb-3">
-                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200">Vehicle Records</h3>
-                        <p class="text-[10px] text-slate-500 mt-0.5">Raw OCR captured from receipts; enrich via Claude whenever you like (Export &rarr; Import) or edit by hand. Card spend stays separate in the CC Dashboard.</p>
+                <div class="lg:col-span-2 glass-card rounded-2xl p-3 sm:p-6 space-y-3">
+                    <div class="border-b border-gray-800 pb-3 flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200">Vehicle Records</h3>
+                            <p class="hidden sm:block text-[10px] text-slate-500 mt-0.5">Raw OCR captured from receipts; enrich via Claude whenever you like (Export &rarr; Import) or edit by hand. Card spend stays separate in the CC Dashboard.</p>
+                        </div>
+                        <button id="vehExpandAllBtn" type="button" onclick="toggleVehicleExpandAll()" class="shrink-0 bg-gray-900 border border-gray-800 hover:border-indigo-500 text-slate-300 font-bold py-1.5 px-2.5 rounded-lg text-[10px] uppercase tracking-wider transition"><i class="fa-solid fa-angles-down mr-1"></i>Expand all</button>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead class="text-[9px] uppercase tracking-wider text-slate-500 border-b border-gray-800">
                                 <tr>
-                                    <th class="py-2 px-3 text-center"><input type="checkbox" onchange="toggleAllVehicle(this)" title="Select all" class="accent-indigo-500"></th>
-                                    <th class="py-2 px-4">Record</th>
-                                    <th class="py-2 px-4">Category</th>
-                                    <th class="py-2 px-4 text-right">Odometer</th>
-                                    <th class="py-2 px-4 text-right">Amount</th>
-                                    <th class="py-2 px-4 text-center">Items</th>
-                                    <th class="py-2 px-4 text-center">Actions</th>
+                                    <th class="py-2 px-2 sm:px-3 text-center"><input type="checkbox" onchange="toggleAllVehicle(this)" title="Select all" class="accent-indigo-500"></th>
+                                    <th class="py-2 px-2 sm:px-4">Record</th>
+                                    <th class="hidden sm:table-cell py-2 px-4">Category</th>
+                                    <th class="hidden md:table-cell py-2 px-4 text-right">Odometer</th>
+                                    <th class="py-2 px-2 sm:px-4 text-right">Amount</th>
+                                    <th class="hidden md:table-cell py-2 px-4 text-center">Items</th>
+                                    <th class="py-2 px-1 sm:px-4 text-center"><span class="hidden sm:inline">Actions</span></th>
                                 </tr>
                             </thead>
                             <tbody id="vehLedgerBody" class="divide-y divide-gray-800/60 text-slate-300"></tbody>
@@ -1374,6 +1401,91 @@
                     <div class="glass-card rounded-2xl p-6">
                         <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3">Spend by Category</h3>
                         <div class="h-48"><canvas id="vehSplitChart"></canvas></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tabContent-dining" class="hidden space-y-6">
+            <!-- KPI dashboard -->
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+                <div class="glass-card rounded-2xl p-3 sm:p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Total Spend</span>
+                    <h2 id="dinKpiTotal" class="text-base sm:text-lg font-bold text-slate-100 font-mono">RM 0.00</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-3 sm:p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Meals</span>
+                    <h2 id="dinKpiMeals" class="text-base sm:text-lg font-bold text-teal-400 font-mono">0</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-3 sm:p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Avg / Meal</span>
+                    <h2 id="dinKpiAvg" class="text-base sm:text-lg font-bold text-amber-400 font-mono">&mdash;</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-3 sm:p-4 space-y-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Dishes Ordered</span>
+                    <h2 id="dinKpiDishes" class="text-base sm:text-lg font-bold text-orange-400 font-mono">0</h2>
+                </div>
+                <div class="glass-card rounded-2xl p-3 sm:p-4 space-y-1 col-span-2 lg:col-span-1">
+                    <span class="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Awaiting Breakdown</span>
+                    <h2 id="dinKpiRaw" class="text-base sm:text-lg font-bold text-violet-400 font-mono">0</h2>
+                </div>
+            </div>
+
+            <!-- Toolbar: filters + actions -->
+            <div class="glass-card rounded-2xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                <div class="grid grid-cols-3 sm:flex sm:flex-wrap gap-2">
+                    <select id="dinFilterYear" onchange="onDiningFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-2 sm:px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer font-semibold"><option value="ALL">All Years</option></select>
+                    <select id="dinFilterMonth" onchange="onDiningFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-2 sm:px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer font-semibold">
+                        <option value="ALL">All Months</option>
+                        <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+                        <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+                        <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+                        <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+                    </select>
+                    <select id="dinFilterMeal" onchange="onDiningFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-2 sm:px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer font-semibold"><option value="ALL">All Meals</option></select>
+                    <input type="search" id="dinFilterSearch" oninput="onDiningFilterChange()" placeholder="Search restaurant / dish..." class="col-span-3 bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500 sm:w-48">
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="openDiningModal()" class="bg-orange-600 hover:bg-orange-500 text-white font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-plus mr-1"></i>Add Meal</button>
+                    <button onclick="openDiningEnrichPanel()" title="Copy a ready-made prompt into Claude, then paste its reply back — no files" class="bg-gray-900 border border-gray-800 hover:border-emerald-500 text-slate-200 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Claude copy/paste</button>
+                    <button onclick="exportDiningRaw('selected')" title="Export the ticked meals to send to Claude" class="bg-gray-900 border border-gray-800 hover:border-orange-500 text-slate-200 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition"><i class="fa-solid fa-file-export mr-1"></i>Export selected</button>
+                    <button onclick="exportDiningRaw('new')" title="Export all meals without a dish breakdown yet" class="bg-gray-900 border border-gray-800 hover:border-orange-500 text-slate-400 font-bold py-2 px-2.5 rounded-xl text-[11px] uppercase tracking-wider transition">New</button>
+                    <button onclick="exportDiningRaw('all')" title="Export all meals" class="bg-gray-900 border border-gray-800 hover:border-orange-500 text-slate-400 font-bold py-2 px-2.5 rounded-xl text-[11px] uppercase tracking-wider transition">All</button>
+                    <label for="dinImportFile" class="cursor-pointer bg-gray-900 border border-gray-800 hover:border-emerald-500 text-slate-200 font-bold py-2 px-3 rounded-xl text-[11px] uppercase tracking-wider transition inline-flex items-center"><i class="fa-solid fa-file-import mr-1"></i>Import JSON</label>
+                    <input type="file" id="dinImportFile" accept="application/json,.json" onchange="handleDiningImportFile(this)" class="hidden">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 glass-card rounded-2xl p-3 sm:p-6 space-y-2">
+                    <div class="border-b border-gray-800 pb-3 flex items-start justify-between gap-3">
+                        <div class="min-w-0 flex items-start gap-2 sm:gap-3">
+                            <input type="checkbox" onchange="toggleAllDining(this)" title="Select all" class="accent-indigo-500 mt-1">
+                            <div class="min-w-0">
+                                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200"><i class="fa-solid fa-utensils text-orange-400 mr-1.5"></i>Meals</h3>
+                                <p class="hidden sm:block text-[10px] text-slate-500 mt-0.5">Tap a meal's chip to see the dishes ordered. Raw receipts can be broken down by Claude any time (copy/paste or Export &rarr; Import), or edited by hand. Card spend stays separate in the CC Dashboard.</p>
+                            </div>
+                        </div>
+                        <button id="dinExpandAllBtn" type="button" onclick="toggleDiningExpandAll()" class="shrink-0 bg-gray-900 border border-gray-800 hover:border-orange-500 text-slate-300 font-bold py-1.5 px-2.5 rounded-lg text-[10px] uppercase tracking-wider transition"><i class="fa-solid fa-angles-down mr-1"></i>Expand all</button>
+                    </div>
+                    <div id="dinList" class="divide-y divide-gray-800/60"></div>
+                </div>
+                <div class="space-y-6">
+                    <div class="glass-card rounded-2xl p-4 sm:p-6 space-y-3">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200"><i class="fa-solid fa-bowl-food text-orange-400 mr-1.5"></i>Most Ordered Dishes</h3>
+                        <div id="dinTopDishes" class="space-y-2"></div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-4 sm:p-6 space-y-3">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200"><i class="fa-solid fa-store text-amber-400 mr-1.5"></i>Top Restaurants</h3>
+                        <div id="dinTopRestaurants" class="space-y-2"></div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-4 sm:p-6">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3">Spend by Month</h3>
+                        <div class="h-48"><canvas id="dinTrendChart"></canvas></div>
+                    </div>
+                    <div class="glass-card rounded-2xl p-4 sm:p-6">
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 mb-3">Spend by Meal</h3>
+                        <div class="h-48"><canvas id="dinSplitChart"></canvas></div>
                     </div>
                 </div>
             </div>
@@ -1792,6 +1904,73 @@
         </div>
     </div>
 
+
+    <!-- Dining Meal Modal -->
+    <div id="diningModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="glass-card w-full max-w-lg rounded-2xl p-4 sm:p-6 space-y-4 m-3 sm:m-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <h3 class="text-sm font-bold text-orange-400 uppercase tracking-widest"><i class="fa-solid fa-utensils mr-1.5"></i><span id="dinModalTitle">Meal</span></h3>
+                <button onclick="closeDiningModal()" class="text-slate-400 hover:text-slate-100"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="diningForm" onsubmit="handleDiningSubmit(event)" class="space-y-3">
+                <input type="hidden" id="dinRecId">
+                <div id="dinRecPhotos" class="flex flex-wrap gap-2"></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="col-span-2"><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Restaurant</label>
+                        <input type="text" id="dinRecRestaurant" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Date</label>
+                        <input type="date" id="dinRecDate" required class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none block [color-scheme:dark]"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Meal</label>
+                        <select id="dinRecMeal" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></select></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Amount Paid</label>
+                        <input type="number" step="0.01" inputmode="decimal" id="dinRecAmount" oninput="dinRecalc()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-orange-300 focus:outline-none"></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Pax</label>
+                            <input type="number" step="1" min="0" inputmode="numeric" id="dinRecPax" placeholder="—" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                        <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Currency</label>
+                            <input type="text" id="dinRecCurrency" value="MYR" oninput="dinRecalc()" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Dishes ordered <span class="normal-case text-slate-500">(qty &middot; line total)</span></label>
+                        <button type="button" onclick="addDishRow()" class="text-[10px] text-orange-400 hover:text-orange-300 font-bold"><i class="fa-solid fa-plus mr-1"></i>Add dish</button>
+                    </div>
+                    <div id="dinItemRows" class="space-y-2"></div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Service</label>
+                        <input type="number" step="0.01" inputmode="decimal" id="dinRecService" oninput="dinRecalc()" placeholder="0.00" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-2 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Tax / SST</label>
+                        <input type="number" step="0.01" inputmode="decimal" id="dinRecTax" oninput="dinRecalc()" placeholder="0.00" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-2 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                    <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Discount</label>
+                        <input type="number" step="0.01" inputmode="decimal" id="dinRecDiscount" oninput="dinRecalc()" placeholder="0.00" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-2 py-2 text-xs text-slate-100 focus:outline-none"></div>
+                </div>
+
+                <div class="flex items-center justify-between bg-gray-950 border border-gray-800/80 rounded-xl px-3 py-2">
+                    <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Breakdown total</span>
+                    <span class="flex items-center gap-2">
+                        <span id="dinRecTotalDisplay" class="text-sm font-bold text-slate-100 font-mono">MYR 0.00</span>
+                        <button type="button" onclick="dinUseBreakdownTotal()" title="Use as Amount Paid" class="text-[9px] font-bold uppercase text-orange-400 hover:text-orange-300">Use</button>
+                    </span>
+                </div>
+                <p id="dinRecReconcile" class="text-[10px] text-rose-400 hidden"></p>
+
+                <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Remark</label>
+                    <input type="text" id="dinRecRemark" class="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none"></div>
+
+                <details class="bg-gray-950 border border-gray-800 rounded-xl p-3">
+                    <summary class="text-[10px] uppercase tracking-wider text-slate-400 font-bold cursor-pointer">Raw OCR (source for Claude)</summary>
+                    <textarea id="dinRecRawOcr" readonly class="w-full h-24 mt-2 bg-gray-900 border border-gray-800 rounded-lg px-2 py-1.5 text-[10px] text-slate-400 font-mono"></textarea>
+                </details>
+
+                <button type="submit" class="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition">Save Meal</button>
+            </form>
+        </div>
+    </div>
+
     <!--
       Cache-busting module loader. GitHub Pages serves src/*.js with a fixed
       Cache-Control: max-age=600, and ES module sub-imports (./calc.js etc.) do
@@ -1802,12 +1981,12 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.10.17-1';
+      window.APP_VERSION = '2026.10.17-2';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','merge','dashboard','dropdowns',
           'ui','charts','calc','cards','optimizer','sspn','transactions',
-          'claims','medical','vehicle','savings','autosync','receipts','ocr','excel','enrich','statement','mobile','main'];
+          'claims','medical','vehicle','dining','savings','autosync','receipts','ocr','excel','enrich','statement','mobile','main'];
         var imports = {};
         mods.forEach(function (m) { imports['./src/' + m + '.js'] = './src/' + m + '.js?v=' + v; });
         var im = document.createElement('script');

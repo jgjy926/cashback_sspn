@@ -4,6 +4,7 @@ import { refreshLedgerAndCalculations } from './dashboard.js';
 import { renderClaims } from './claims.js';
 import { createMedicalRecordFromReceipt, renderMedical } from './medical.js';
 import { createVehicleRecordFromReceipt, renderVehicle, vehicleOptionsHtml, vehicleCategoryOptionsHtml } from './vehicle.js';
+import { createDiningRecordFromReceipt, renderDining, diningMealTypeOptionsHtml } from './dining.js';
 import { showToast } from './ui.js';
 import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant,
   aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD, AI_FIELD_CEILING } from './ocr.js';
@@ -226,6 +227,8 @@ function fillReceiptForm(parsed, text) {
   document.getElementById('recVehicle').innerHTML = vehicleOptionsHtml();
   document.getElementById('recVehicleCategory').innerHTML = vehicleCategoryOptionsHtml();
   recLogVehicleChange();  // start collapsed; the tick reveals the vehicle fields
+  document.getElementById('recDiningMeal').innerHTML = '<option value="">Auto (from receipt time)</option>' + diningMealTypeOptionsHtml();
+  recLogDiningChange();
   recCardChange();
   recClaimTypeChange(); // arm claim routing to match the pre-selected claim type
   document.getElementById('recMerchant').value = merchant || '';
@@ -264,6 +267,13 @@ function aiRefineInBackground(text, parsed) {
 }
 
 // The vehicle picker only matters once the tick is on, so it stays out of the way until then.
+// Same pattern for Dining: meal type + pax only appear once the tick is on.
+export function recLogDiningChange() {
+  const el = document.getElementById('recLogDining');
+  const box = document.getElementById('recDiningFields');
+  if (el && box) box.classList.toggle('hidden', !el.checked);
+}
+
 export function recLogVehicleChange() {
   const on = document.getElementById('recLogVehicle').checked;
   document.getElementById('recVehicleFields').classList.toggle('hidden', !on);
@@ -315,6 +325,7 @@ export async function saveReceipt(e) {
   const linkClaim = document.getElementById('recLinkClaim').checked;
   const logMedical = document.getElementById('recLogMedical').checked;
   const logVehicle = document.getElementById('recLogVehicle').checked;
+  const logDining = !!(document.getElementById('recLogDining') || {}).checked;
 
   let txId = null;
   if (alsoLog && total > 0 && cardId) {
@@ -373,6 +384,18 @@ export async function saveReceipt(e) {
     });
   }
 
+  // Log to Dining. Saves as "Raw" — break it down into dishes later from the Dining tab
+  // (Claude copy/paste or Export → Import), or type the dishes in by hand.
+  let dinId = null;
+  if (logDining) {
+    dinId = createDiningRecordFromReceipt(receipt, {
+      imagePaths: await groupPhotoPaths(),
+      rawOcr: combinedOcrText(),
+      mealType: document.getElementById('recDiningMeal').value,
+      pax: document.getElementById('recDiningPax').value,
+    });
+  }
+
   // Self-learning: remember the merchant the user confirmed for these receipt tokens.
   learnMerchant(pending.ocrText, merchant);
 
@@ -382,6 +405,7 @@ export async function saveReceipt(e) {
   renderClaims();
   renderMedical();
   renderVehicle();
+  renderDining();
 
   pendingPhotos = [];
   pending = null;
@@ -393,7 +417,8 @@ export async function saveReceipt(e) {
   for (const id of ['receiptFile', 'receiptCamera']) { const el = document.getElementById(id); if (el) el.value = ''; }
   document.getElementById('receiptOcrStatus').innerText = '';
   document.getElementById('recVehicleFields').classList.add('hidden');
-  const dest = [txId && 'ledger', claimId && 'claims', medId && 'medical records', vehId && 'vehicle'].filter(Boolean).join(' & ');
+  { const d = document.getElementById('recDiningFields'); if (d) d.classList.add('hidden'); }
+  const dest = [txId && 'ledger', claimId && 'claims', medId && 'medical records', vehId && 'vehicle', dinId && 'dining'].filter(Boolean).join(' & ');
   showToast(dest ? `Receipt saved (added to ${dest}).` : 'Receipt saved.', 'success');
 }
 

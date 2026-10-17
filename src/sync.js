@@ -7,6 +7,8 @@ import { gatewayConfig } from './config.js';
 import { renderReceipts, renderReceiptCalendar } from './receipts.js';
 import { renderClaims } from './claims.js';
 import { renderMedical } from './medical.js';
+import { renderVehicle } from './vehicle.js';
+import { renderDining } from './dining.js';
 import { renderSavings } from './savings.js';
 import { setSyncStatus } from './autosync.js';
 import { mergeLedgers, contentSignature } from './merge.js';
@@ -60,6 +62,8 @@ function adoptMerged(merged) {
   renderReceiptCalendar();
   renderClaims();
   renderMedical();
+  renderVehicle();
+  renderDining();
   renderSavings();
 }
 

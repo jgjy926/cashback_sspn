@@ -16,6 +16,7 @@ import * as receipts from './receipts.js';
 import * as claims from './claims.js';
 import * as medical from './medical.js';
 import * as vehicle from './vehicle.js';
+import * as dining from './dining.js';
 import * as savings from './savings.js';
 import * as autosync from './autosync.js';
 import * as statement from './statement.js';
@@ -28,11 +29,12 @@ import { renderReceipts } from './receipts.js';
 import { renderClaims } from './claims.js';
 import { renderMedical } from './medical.js';
 import { renderVehicle } from './vehicle.js';
+import { renderDining } from './dining.js';
 import { renderSavings } from './savings.js';
 import { initAutoSync } from './autosync.js';
 import { initMobile } from './mobile.js';
 
-Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts, claims, medical, vehicle, savings, autosync, statement, mobile);
+Object.assign(window, ui, storage, calc, dropdowns, dashboard, transactions, cards, optimizer, sspn, charts, excel, sync, receipts, claims, medical, vehicle, dining, savings, autosync, statement, mobile);
 
 window.addEventListener('load', () => {
   // Show which deploy this device is running (APP_VERSION in index.html), so a stale cache is easy to spot.
@@ -47,6 +49,7 @@ window.addEventListener('load', () => {
   renderClaims();
   renderMedical();
   renderVehicle();
+  renderDining();
   renderSavings();
   initAutoSync();                // pull on open + auto-push on change + periodic refresh
   initMobile();                  // flush on background, re-sync on resume/online, Android Back button

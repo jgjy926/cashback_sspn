@@ -449,6 +449,10 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
             if (document.getElementById("settingsClaimStatuses")) database.settings.claimStatuses = parseCsv("settingsClaimStatuses");
             if (document.getElementById("settingsPaymentMethods")) database.settings.paymentMethods = parseCsv("settingsPaymentMethods");
             if (document.getElementById("settingsVehicleCategories")) database.settings.vehicleCategories = parseCsv("settingsVehicleCategories");
+            if (document.getElementById("settingsDiningMealTypes")) {
+                const meals = parseCsv("settingsDiningMealTypes");
+                if (meals.length) database.settings.diningMealTypes = meals;
+            }
 
             saveToLocalStorage();
             populateDropdownOptions();
