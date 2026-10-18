@@ -225,18 +225,20 @@ function renderClaimsLedger(list) {
     const badge = `<button onclick="advanceClaimStatus('${c.id}')" title="Click to advance status" class="px-2 py-0.5 rounded border text-[9px] font-bold ${statusStyle(c.status)}">${esc(c.status || '—')}</button>`;
     const aiBadge = c.enriched ? ' <span title="Enriched with Claude" class="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 rounded font-bold"><i class="fa-solid fa-wand-magic-sparkles"></i></span>' : '';
     return `<tr class="hover:bg-gray-900/40 transition">
-      <td class="py-2.5 px-3 text-center"><input type="checkbox" data-claim-pick value="${esc(c.id)}" class="accent-indigo-500"></td>
-      <td class="py-2.5 px-4">
+      <td class="py-2.5 px-2 sm:px-3 text-center"><input type="checkbox" data-claim-pick value="${esc(c.id)}" class="accent-indigo-500"></td>
+      <td class="py-2.5 px-2 sm:px-4">
         <div class="text-xs font-semibold text-slate-200">${esc(c.title || '(untitled)')}${aiBadge}</div>
+        <div class="sm:hidden text-[9px] text-slate-500 font-mono">${c.submittedDate || '—'} · <span class="text-emerald-400">Reimb RM ${reimb}</span></div>
+        <div class="sm:hidden mt-1">${badge}</div>
         <div class="text-[9px] text-slate-500 font-mono">${esc(c.type)} ${c.reference ? '· ' + esc(c.reference) : ''} ${nReceipts ? '· ' + nReceipts + ' receipt' + (nReceipts > 1 ? 's' : '') : ''}</div>
         ${c.remark ? `<div class="text-[9px] text-slate-400 italic">“${esc(c.remark)}”</div>` : ''}
       </td>
-      <td class="py-2.5 px-4 font-mono text-[11px] text-slate-400">${c.submittedDate || '—'}</td>
-      <td class="py-2.5 px-4 text-right font-mono text-xs text-slate-200">RM ${claimed}</td>
-      <td class="py-2.5 px-4 text-right font-mono text-xs text-emerald-400">RM ${reimb}</td>
-      <td class="py-2.5 px-4 text-center">${badge}</td>
-      <td class="py-2.5 px-4 text-center">
-        <div class="flex gap-1 justify-center">
+      <td class="hidden sm:table-cell py-2.5 px-4 font-mono text-[11px] text-slate-400">${c.submittedDate || '—'}</td>
+      <td class="py-2.5 px-2 sm:px-4 text-right font-mono text-xs text-slate-200 whitespace-nowrap">RM ${claimed}</td>
+      <td class="hidden sm:table-cell py-2.5 px-4 text-right font-mono text-xs text-emerald-400">RM ${reimb}</td>
+      <td class="hidden sm:table-cell py-2.5 px-4 text-center">${badge}</td>
+      <td class="py-2.5 px-1 sm:px-4 text-center">
+        <div class="flex flex-col sm:flex-row gap-1 justify-center">
           <button onclick="openEditClaimModal('${c.id}')" class="text-indigo-400 hover:text-indigo-300 p-1"><i class="fa-solid fa-pen-to-square"></i></button>
           <button onclick="deleteClaim('${c.id}')" class="text-rose-500 hover:text-rose-400 p-1"><i class="fa-solid fa-trash"></i></button>
         </div>

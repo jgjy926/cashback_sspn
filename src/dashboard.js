@@ -8,6 +8,12 @@ import { currentFilterCard, currentInteractiveCardId, database, filterDeckCollap
 import { deleteTx, openEditTxModal } from './transactions.js';
 import { getNetworkIcon, getThemeStyles } from './ui.js';
 
+// Descriptions/remarks arrive from OCR, statement screenshots and imports — escape before innerHTML.
+function escHtml(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
         // The CC dashboard's Year / Month filter selects BILLING CYCLES, not calendar dates: a
         // transaction belongs to the cycle (t.cycleKey, "YYYY-MM") that ends in that month on its
         // card's own cut-off day. Picking Oct on a 16th -> 15th card covers 16 Sep -> 15 Oct.
@@ -79,31 +85,36 @@ import { getNetworkIcon, getThemeStyles } from './ui.js';
                     const sourceBadge = t.receiptId
                         ? `<span title="From receipt" class="text-[8px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-0.5 rounded font-bold"><i class="fa-solid fa-receipt"></i> Receipt</span>`
                         : `<span title="Manual entry" class="text-[8px] bg-slate-500/10 text-slate-400 border border-slate-500/20 px-1.5 py-0.5 rounded font-bold"><i class="fa-solid fa-pen"></i> Manual</span>`;
-                    const remarkLine = t.remark ? `<div class="text-[9px] text-slate-500 italic">“${t.remark}”</div>` : '';
+                    const remarkLine = t.remark ? `<div class="text-[9px] text-slate-500 italic">“${escHtml(t.remark)}”</div>` : '';
 
-                    return `<tr class="hover:bg-gray-900/30 transition text-[11px]">
-                        <td class="py-3 px-4 font-mono">${t.date}${t.cycleKey && t.cycleKey !== t.date.substring(0, 7) ? `<div class="text-[8px] text-indigo-400 font-sans font-semibold">${fmtPeriod(t.cycleKey)} cycle</div>` : ''}</td>
-                        <td class="py-3 px-4 font-semibold text-slate-200">
+                    return `<tr class="hover:bg-gray-900/30 transition text-[11px] align-top sm:align-middle">
+                        <td class="py-3 px-2 sm:px-4 font-mono whitespace-nowrap">${t.date}${t.cycleKey && t.cycleKey !== t.date.substring(0, 7) ? `<div class="text-[8px] text-indigo-400 font-sans font-semibold">${fmtPeriod(t.cycleKey)} cycle</div>` : ''}</td>
+                        <td class="hidden sm:table-cell py-3 px-4 font-semibold text-slate-200">
                             <div class="flex items-center gap-1.5">
                                 ${networkIcon}
                                 <span>${bankPrefix}${card.name}${last4Suffix}</span>
                             </div>
                         </td>
-                        <td class="py-3 px-4 text-indigo-400 font-medium">${t.category}</td>
-                        <td class="py-3 px-4 text-slate-400 font-semibold">${t.internalTag}</td>
-                        <td class="py-3 px-4 text-slate-400">${t.description}${remarkLine}</td>
-                        <td class="py-3 px-4 text-center">${sourceBadge}</td>
-                        <td class="py-3 px-4 text-right font-semibold">RM ${t.amount.toFixed(2)}</td>
-                        <td class="py-3 px-4 text-right font-bold text-indigo-400 font-mono">RM ${t.calculatedCashback.toFixed(2)}</td>
-                        <td class="py-3 px-4 text-center"><span class="text-[9px] font-bold px-2 py-0.5 rounded-md ${statusClass}">${t.statusMessage}</span></td>
-                        <td class="py-3 px-4 text-center">
-                            <div class="flex gap-1 justify-center">
+                        <td class="hidden sm:table-cell py-3 px-4 text-indigo-400 font-medium">${escHtml(t.category)}</td>
+                        <td class="hidden sm:table-cell py-3 px-4 text-slate-400 font-semibold">${escHtml(t.internalTag)}</td>
+                        <td class="py-3 px-2 sm:px-4 text-slate-400">
+                            <div class="sm:hidden text-slate-200 font-semibold">${escHtml(t.description)}</div>
+                            <span class="hidden sm:inline">${escHtml(t.description)}</span>${remarkLine}
+                            <div class="sm:hidden text-[9px] text-slate-500">${escHtml(card.name)} · <span class="text-indigo-400">${escHtml(t.category)}</span></div>
+                            <div class="sm:hidden mt-1 flex flex-wrap gap-1"><span class="text-[8px] font-bold px-1.5 py-0.5 rounded ${statusClass}">${escHtml(t.statusMessage)}</span>${t.receiptId ? sourceBadge : ''}</div>
+                        </td>
+                        <td class="hidden sm:table-cell py-3 px-4 text-center">${sourceBadge}</td>
+                        <td class="py-3 px-2 sm:px-4 text-right font-semibold whitespace-nowrap">RM ${t.amount.toFixed(2)}<div class="sm:hidden text-[9px] font-bold text-indigo-400 font-mono">+${t.calculatedCashback.toFixed(2)}</div></td>
+                        <td class="hidden sm:table-cell py-3 px-4 text-right font-bold text-indigo-400 font-mono">RM ${t.calculatedCashback.toFixed(2)}</td>
+                        <td class="hidden sm:table-cell py-3 px-4 text-center"><span class="text-[9px] font-bold px-2 py-0.5 rounded-md ${statusClass}">${escHtml(t.statusMessage)}</span></td>
+                        <td class="py-3 px-1 sm:px-4 text-center">
+                            <div class="flex flex-col sm:flex-row gap-1 justify-center">
                                 <button onclick="openEditTxModal('${t.id}')" class="text-indigo-400 hover:text-indigo-300 p-1"><i class="fa-solid fa-pen-to-square"></i></button>
                                 <button onclick="deleteTx('${t.id}')" class="text-rose-500 hover:text-rose-400 p-1"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </td>
                     </tr>`;
-                }).join('');
+                }).join('') || '<tr><td colspan="10" class="py-6 text-center text-xs text-slate-500 italic">No transactions in this cycle.</td></tr>';
             }
 
             let totalSpend = 0, totalCashback = 0;

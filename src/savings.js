@@ -399,7 +399,7 @@ function renderScheduleTable(rows) {
 
     const mainRow = `
       <tr class="hover:bg-gray-900/40 transition ${rowTint} ${isOpen ? 'bg-gray-900/30' : ''}">
-        <td class="py-2.5 px-3 whitespace-nowrap">
+        <td class="py-2.5 px-3 whitespace-nowrap sticky left-0 z-10 bg-[#0d1220] sm:static sm:bg-transparent">
           <button onclick="toggleMonthBreakdown('${r.month}')" title="Click to see this month's tier breakdown" class="flex items-center gap-1.5 font-semibold text-slate-200 text-xs hover:text-emerald-300 transition">
             <i class="fa-solid ${chev} text-[8px] text-slate-500 w-2"></i>${r.label}
           </button>

@@ -177,8 +177,15 @@ Category, Odometer and Items columns are hidden (they're still shown in the expa
 
 Same zero-cost flow as Vehicle, for meals out. In the **Receipts** tab tick **Record into
 Dining**; the meal type defaults to *Auto* (guessed from the time printed on the receipt —
-Breakfast / Lunch / Tea / Dinner / Supper) and pax is optional. The record lands in the
-**Dining** tab as *Raw* with the photos and OCR text, seeded with the receipt's total.
+Breakfast / Lunch / Tea / Dinner / Supper, or *Other* when no time is printed) and pax is
+optional. The record lands in the **Dining** tab as *Raw* with the photos and OCR text, seeded
+with the receipt's total.
+
+Already-stored receipts work the same way as claims: open a receipt's **Edit** and tick
+**Record into Dining from this receipt** (meal type + pax appear). Once linked, the receipt
+shows a 🍴 badge and the same tick becomes **Also apply these changes to the linked Dining
+record** (date, restaurant, amount, remark — dishes are left alone). Deleting the receipt
+offers to delete the Dining record too; otherwise the meal is kept and only unlinked.
 
 Break the bill into dishes whenever you like — the **Claude copy/paste** panel (ticked meals,
 else the ones not yet broken down: copy the prompt, paste Claude's reply back), or

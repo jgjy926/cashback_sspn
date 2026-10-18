@@ -4,7 +4,8 @@ import { refreshLedgerAndCalculations } from './dashboard.js';
 import { renderClaims } from './claims.js';
 import { createMedicalRecordFromReceipt, renderMedical } from './medical.js';
 import { createVehicleRecordFromReceipt, renderVehicle, vehicleOptionsHtml, vehicleCategoryOptionsHtml } from './vehicle.js';
-import { createDiningRecordFromReceipt, renderDining, diningMealTypeOptionsHtml } from './dining.js';
+import { createDiningRecordFromReceipt, renderDining, diningMealTypeOptionsHtml,
+  diningRecordForReceipt, syncDiningFromReceipt, deleteDiningForReceipt } from './dining.js';
 import { showToast } from './ui.js';
 import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant,
   aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD, AI_FIELD_CEILING } from './ocr.js';
@@ -227,7 +228,7 @@ function fillReceiptForm(parsed, text) {
   document.getElementById('recVehicle').innerHTML = vehicleOptionsHtml();
   document.getElementById('recVehicleCategory').innerHTML = vehicleCategoryOptionsHtml();
   recLogVehicleChange();  // start collapsed; the tick reveals the vehicle fields
-  document.getElementById('recDiningMeal').innerHTML = '<option value="">Auto (from receipt time)</option>' + diningMealTypeOptionsHtml();
+  document.getElementById('recDiningMeal').innerHTML = '<option value="">Auto-detect</option>' + diningMealTypeOptionsHtml();
   recLogDiningChange();
   recCardChange();
   recClaimTypeChange(); // arm claim routing to match the pre-selected claim type
@@ -467,13 +468,15 @@ export function renderReceipts() {
     const claimBadge = receiptClaimBadge(r.claimStatus);
     const claimedBadge = r.claimId ? '<span class="text-[8px] bg-violet-500/10 text-violet-300 border border-violet-500/20 px-1.5 rounded font-bold">Claimed</span>' : '';
     const payBadge = r.paymentMethod ? `<span class="text-[8px] bg-slate-500/10 text-slate-300 border border-slate-500/20 px-1.5 rounded font-bold">${esc(r.paymentMethod)}</span>` : '';
+    const dinBadge = diningRecordForReceipt(r.id) ? '<span title="Recorded in Dining" class="text-[8px] bg-orange-500/10 text-orange-300 border border-orange-500/20 px-1.5 rounded font-bold"><i class="fa-solid fa-utensils"></i></span>' : '';
     const aiBadge = r.enriched ? '<span title="Enriched with Claude" class="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 rounded font-bold"><i class="fa-solid fa-wand-magic-sparkles"></i></span>' : '';
     const remark = r.remark ? `<div class="text-[10px] text-slate-400 italic truncate">“${esc(r.remark)}”</div>` : '';
     return `
       <div class="flex items-center justify-between gap-3 p-3 bg-gray-950/40 border border-gray-800/60 rounded-xl">
         <input type="checkbox" data-rec-pick value="${esc(r.id)}" title="Select for Claude enrichment" class="accent-indigo-500 shrink-0">
         <div class="min-w-0 flex-1">
-          <div class="text-xs font-bold text-slate-200 truncate flex items-center gap-1.5">${esc(r.merchant || '(no merchant)')} ${linked} ${claimBadge} ${claimedBadge} ${payBadge} ${aiBadge}</div>
+          <div class="text-xs font-bold text-slate-200 truncate">${esc(r.merchant || '(no merchant)')}</div>
+          <div class="flex flex-wrap items-center gap-1 my-0.5 empty:hidden">${[linked, claimBadge, claimedBadge, payBadge, dinBadge, aiBadge].filter(Boolean).join('')}</div>
           <div class="text-[10px] text-slate-500 font-mono">${esc(r.date || '')} · ${esc(r.currency || '')} ${esc(amt)} · ${(r.bytes / 1024).toFixed(0)} KB</div>
           ${remark}
         </div>
@@ -527,6 +530,7 @@ export function editReceipt(id) {
   document.getElementById('editRecClaimSubmitted').value = (solo && solo.submittedDate) || r.date || '';
   document.getElementById('editRecClaimReference').value = (solo && solo.reference) || '';
   updateEditClaimControls();
+  updateEditDiningControls(r);
   document.getElementById('editReceiptModal').classList.remove('hidden');
 }
 
@@ -581,6 +585,28 @@ export function updateEditClaimFieldVisibility() {
     const sub = document.getElementById('editRecClaimSubmitted');
     if (sub && !sub.value) sub.value = (r && r.date) || document.getElementById('editRecDate').value || '';
   }
+}
+
+// Same shape as the claim control: a receipt already in Dining offers to push these edits onto
+// that record; one that isn't offers to create it (meal type + pax revealed by the tick).
+function updateEditDiningControls(r) {
+  const cb = document.getElementById('editRecApplyDining');
+  const lbl = document.getElementById('editRecApplyDiningLabel');
+  if (!cb) return;
+  const linked = diningRecordForReceipt(r.id);
+  cb.checked = !!linked;
+  if (lbl) lbl.innerText = linked
+    ? 'Also apply these changes to the linked Dining record'
+    : 'Record into Dining from this receipt — Claude can break it down into dishes later';
+  document.getElementById('editRecDiningMeal').innerHTML =
+    `<option value="">${linked ? 'Keep current' : 'Auto-detect'}</option>` + diningMealTypeOptionsHtml();
+  document.getElementById('editRecDiningPax').value = linked && linked.pax ? linked.pax : '';
+  updateEditDiningFieldVisibility();
+}
+
+export function updateEditDiningFieldVisibility() {
+  const on = document.getElementById('editRecApplyDining').checked;
+  document.getElementById('editRecDiningFields').classList.toggle('hidden', !on);
 }
 
 export function editRecClaimTypeChange() {
@@ -639,12 +665,24 @@ export function handleReceiptEditSubmit(e) {
     r.claimId = createClaimFromReceipt(r, { submittedDate: claimSubmitted, reference: claimReference });
   }
 
+  // Dining: sync the linked record, or create one from this stored receipt (photo + raw OCR).
+  let dinMsg = '';
+  if (document.getElementById('editRecApplyDining').checked) {
+    const dinExtra = {
+      mealType: document.getElementById('editRecDiningMeal').value,
+      pax: document.getElementById('editRecDiningPax').value,
+    };
+    if (diningRecordForReceipt(r.id)) syncDiningFromReceipt(r, dinExtra);
+    else { createDiningRecordFromReceipt(r, dinExtra); dinMsg = ' Added to Dining.'; }
+  }
+
   saveToLocalStorage();
   refreshLedgerAndCalculations();
   renderReceipts();
   renderClaims();
+  renderDining();
   closeEditReceipt();
-  showToast('Receipt updated.', 'success');
+  showToast('Receipt updated.' + dinMsg, 'success');
 }
 
 // ---------- delete (modal, with image removal + optional tx) ----------
@@ -661,6 +699,8 @@ export function deleteReceipt(id) {
   const claimCb = document.getElementById('deleteRecAlsoClaim');
   claimCb.checked = false;
   if (linkedSoloClaim(r)) claimWrap.classList.remove('hidden'); else claimWrap.classList.add('hidden');
+  document.getElementById('deleteRecAlsoDining').checked = false;
+  document.getElementById('deleteRecDiningLinkWrap').classList.toggle('hidden', !diningRecordForReceipt(id));
   document.getElementById('deleteReceiptModal').classList.remove('hidden');
 }
 
@@ -673,6 +713,7 @@ export async function confirmDeleteReceipt() {
   const r = (database.receipts || []).find(x => x.id === id);
   const alsoTx = document.getElementById('deleteRecAlsoTx').checked;
   const alsoClaim = document.getElementById('deleteRecAlsoClaim').checked;
+  const alsoDining = document.getElementById('deleteRecAlsoDining').checked;
   const { base, token } = gatewayConfig();
 
   if (base && token) {
@@ -699,11 +740,18 @@ export async function confirmDeleteReceipt() {
     if (alsoClaim && solo) database.claims = (database.claims || []).filter(c => c.id !== r.claimId);
     else if (claim && Array.isArray(claim.receiptIds)) claim.receiptIds = claim.receiptIds.filter(rid => rid !== id);
   }
+  // Dining keeps its own dishes, so by default the meal survives with the receipt link cleared.
+  if (alsoDining) deleteDiningForReceipt(id);
+  else {
+    const d = diningRecordForReceipt(id);
+    if (d) { d.receiptId = null; d.imagePaths = (d.imagePaths || []).filter(p => p !== `receipt/${id}`); }
+  }
 
   saveToLocalStorage();
   refreshLedgerAndCalculations();
   renderReceipts();
   renderClaims();
+  renderDining();
   closeDeleteReceipt();
   showToast('Receipt deleted.', 'success');
 }
@@ -956,6 +1004,9 @@ function importReceiptsEnriched(data) {
       tx.description = r.merchant || 'Receipt'; tx.remark = r.remark;
       txSynced++;
     }
+    // A Raw dining record follows the cleaned-up header; an enriched one keeps its own values.
+    const din = diningRecordForReceipt(r.id);
+    if (din && !din.enriched) syncDiningFromReceipt(r);
     const solo = linkedSoloClaim(r);
     if (solo) {
       solo.title = r.merchant || solo.title;
@@ -975,6 +1026,7 @@ function importReceiptsEnriched(data) {
   refreshLedgerAndCalculations();
   renderReceipts();
   renderClaims();
+  renderDining();
   let msg = `Imported: ${updated} receipt(s) enriched`;
   if (txSynced) msg += ` · ${txSynced} ledger entr${txSynced > 1 ? 'ies' : 'y'} updated`;
   if (claimsSynced) msg += ` · ${claimsSynced} claim(s) updated`;

@@ -17,23 +17,24 @@ import { askConfirm, getNetworkIcon, getThemeStyles, showToast } from './ui.js';
 
                     return `
                         <tr class="border-b border-gray-900 hover:bg-gray-900/30 transition text-xs">
-                            <td class="py-3 px-4 font-bold text-slate-200">
+                            <td class="py-3 px-2 sm:px-4 font-bold text-slate-200">
                                 <div class="flex items-center gap-1.5">
                                     ${networkIcon}
                                     <span>${bankText}${c.name}</span>
                                 </div>
-                                <span class="text-[9px] block font-mono text-slate-500">${c.id} ${last4Text}</span>
+                                <span class="text-[9px] block font-mono text-slate-500 break-all">${c.id} ${last4Text}</span>
+                                <span class="sm:hidden inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase ${styles.badge}">${c.theme}</span>
                             </td>
-                            <td class="py-3 px-4 uppercase text-xs">
+                            <td class="hidden sm:table-cell py-3 px-4 uppercase text-xs">
                                 <span class="px-2 py-0.5 rounded text-[10px] font-bold ${styles.badge}">${c.theme}</span>
                             </td>
-                            <td class="py-3 px-4 text-slate-400 font-semibold">Day ${c.billingDay}${c.cashbackCycleEndDay > 0 && c.cashbackCycleEndDay !== c.billingDay ? `<span class="text-[9px] block font-semibold text-emerald-400">CB period ends day ${c.cashbackCycleEndDay}</span>` : ''}</td>
-                            <td class="py-3 px-4 text-slate-400 font-mono">
+                            <td class="py-3 px-2 sm:px-4 text-slate-400 font-semibold">Day ${c.billingDay}${c.cashbackCycleEndDay > 0 && c.cashbackCycleEndDay !== c.billingDay ? `<span class="text-[9px] block font-semibold text-emerald-400">CB period ends day ${c.cashbackCycleEndDay}</span>` : ''}</td>
+                            <td class="py-3 px-2 sm:px-4 text-slate-400 font-mono">
                                 <span class="text-xs block font-bold text-slate-300">Min: ${minSpendText}</span>
                                 <span class="text-[9px] block font-semibold text-indigo-400">Cap: ${textCap}</span>
                             </td>
-                            <td class="py-3 px-4 text-center">
-                                <div class="flex gap-1.5 justify-center">
+                            <td class="py-3 px-1 sm:px-4 text-center">
+                                <div class="flex flex-col sm:flex-row gap-1.5 justify-center items-center">
                                     <button onclick="editCard('${c.id}')" class="text-indigo-400 hover:text-indigo-300 p-1 bg-indigo-500/10 hover:bg-indigo-500/25 rounded transition"><i class="fa-solid fa-pen-to-square"></i></button>
                                     <button onclick="deleteCard('${c.id}')" class="text-rose-500 hover:text-rose-400 p-1 bg-rose-500/10 hover:bg-rose-500/25 rounded transition"><i class="fa-solid fa-trash"></i></button>
                                 </div>

@@ -74,14 +74,14 @@ import { askConfirm, initDatePickers, showToast } from './ui.js';
 
                 return `
                     <tr class="hover:bg-gray-900/40 transition">
-                        <td class="py-2.5 px-4 font-mono text-[11px]">${r.date}</td>
-                        <td class="py-2.5 px-4 font-semibold text-slate-300 text-xs font-sans">
+                        <td class="py-2.5 px-2 sm:px-4 font-mono text-[11px]">${r.date}</td>
+                        <td class="py-2.5 px-2 sm:px-4 font-semibold text-slate-300 text-xs font-sans">
                             <div>${r.channel}</div>
                             <div class="text-[9px] text-slate-500 font-normal">${r.method}</div>
                         </td>
-                        <td class="py-2.5 px-4 text-right font-bold ${amtClass} text-xs font-mono">RM ${sign}${r.amount.toFixed(2)}</td>
-                        <td class="py-2.5 px-4 text-center">${reflectedBadge}</td>
-                        <td class="py-2.5 px-4 text-center">
+                        <td class="py-2.5 px-2 sm:px-4 text-right font-bold ${amtClass} text-xs font-mono">RM ${sign}${r.amount.toFixed(2)}</td>
+                        <td class="py-2.5 px-2 sm:px-4 text-center">${reflectedBadge}</td>
+                        <td class="py-2.5 px-2 sm:px-4 text-center">
                             <div class="flex gap-1 justify-center">
                                 <button onclick="openEditSspnModal('${r.id}')" class="text-indigo-400 hover:text-indigo-300 p-1"><i class="fa-solid fa-pen-to-square"></i></button>
                                 <button onclick="deleteSspn('${r.id}')" class="text-rose-500 hover:text-rose-400 p-1"><i class="fa-solid fa-trash"></i></button>

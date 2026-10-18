@@ -254,16 +254,16 @@
                         <table class="w-full text-left text-xs text-slate-300 border-collapse">
                             <thead class="bg-gray-900/60 uppercase text-[10px] tracking-widest text-slate-500 font-bold border-b border-gray-800">
                                 <tr>
-                                    <th class="py-3 px-4">Date</th>
-                                    <th class="py-3 px-4">Card</th>
-                                    <th class="py-3 px-4">Category</th>
-                                    <th class="py-3 px-4">Personal Tag</th>
-                                    <th class="py-3 px-4">Description</th>
-                                    <th class="py-3 px-4 text-center">Source</th>
-                                    <th class="py-3 px-4 text-right">Amount</th>
-                                    <th class="py-3 px-4 text-right">Yield</th>
-                                    <th class="py-3 px-4 text-center">Status</th>
-                                    <th class="py-3 px-4 text-center">Actions</th>
+                                    <th class="py-3 px-2 sm:px-4">Date</th>
+                                    <th class="hidden sm:table-cell py-3 px-4">Card</th>
+                                    <th class="hidden sm:table-cell py-3 px-4">Category</th>
+                                    <th class="hidden sm:table-cell py-3 px-4">Personal Tag</th>
+                                    <th class="py-3 px-2 sm:px-4">Description</th>
+                                    <th class="hidden sm:table-cell py-3 px-4 text-center">Source</th>
+                                    <th class="py-3 px-2 sm:px-4 text-right">Amount</th>
+                                    <th class="hidden sm:table-cell py-3 px-4 text-right">Yield</th>
+                                    <th class="hidden sm:table-cell py-3 px-4 text-center">Status</th>
+                                    <th class="py-3 px-1 sm:px-4 text-center"><span class="hidden sm:inline">Actions</span></th>
                                 </tr>
                             </thead>
                             <tbody id="transactionLedgerBody" class="divide-y divide-gray-800/60 font-sans"></tbody>
@@ -536,11 +536,11 @@
                             <table class="w-full text-left text-xs text-slate-300 border-collapse">
                                 <thead class="bg-gray-900/60 uppercase text-[10px] tracking-widest text-slate-500 font-bold border-b border-gray-800">
                                     <tr>
-                                        <th class="py-3 px-4">Date</th>
-                                        <th class="py-3 px-4">Channel</th>
-                                        <th class="py-3 px-4 text-right">Amount</th>
-                                        <th class="py-3 px-4 text-center">Reflected</th>
-                                        <th class="py-3 px-4 text-center">Actions</th>
+                                        <th class="py-3 px-2 sm:px-4">Date</th>
+                                        <th class="py-3 px-2 sm:px-4">Channel</th>
+                                        <th class="py-3 px-2 sm:px-4 text-right">Amount</th>
+                                        <th class="py-3 px-2 sm:px-4 text-center">Reflected</th>
+                                        <th class="py-3 px-2 sm:px-4 text-center"><span class="hidden sm:inline">Actions</span></th>
                                     </tr>
                                 </thead>
                                 <tbody id="sspnHistoryLedgerBody" class="divide-y divide-gray-800"></tbody>
@@ -636,7 +636,7 @@
                     <table class="w-full text-left text-xs text-slate-300 border-collapse min-w-[860px]">
                         <thead class="bg-gray-900/60 uppercase text-[9px] tracking-widest text-slate-500 font-bold border-b border-gray-800">
                             <tr>
-                                <th class="py-3 px-3">Month</th>
+                                <th class="py-3 px-3 sticky left-0 z-10 bg-[#0d1220] sm:static sm:bg-transparent">Month</th>
                                 <th class="py-3 px-3 text-right">Balance (Open)</th>
                                 <th class="py-3 px-3 text-right">Deposit (+)</th>
                                 <th class="py-3 px-3 text-right">Interest Credit</th>
@@ -672,11 +672,11 @@
                         <table class="w-full text-left text-xs text-slate-300 border-collapse">
                             <thead class="bg-gray-900/60 uppercase text-[10px] tracking-widest text-slate-500 font-bold border-b border-gray-800">
                                 <tr>
-                                    <th class="py-3 px-4">Card Identifier</th>
-                                    <th class="py-3 px-4">Theme Variant</th>
-                                    <th class="py-3 px-4">Billing Day</th>
-                                    <th class="py-3 px-4">Min Spend / Cap</th>
-                                    <th class="py-3 px-4 text-center">Actions</th>
+                                    <th class="py-3 px-2 sm:px-4">Card Identifier</th>
+                                    <th class="hidden sm:table-cell py-3 px-4">Theme Variant</th>
+                                    <th class="py-3 px-2 sm:px-4">Billing Day</th>
+                                    <th class="py-3 px-2 sm:px-4">Min Spend / Cap</th>
+                                    <th class="py-3 px-1 sm:px-4 text-center"><span class="hidden sm:inline">Actions</span></th>
                                 </tr>
                             </thead>
                             <tbody id="cardManagerTableBody"></tbody>
@@ -1057,15 +1057,15 @@
                         <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200">Stored Receipts</h3>
                         <p class="text-[10px] text-slate-500 mt-0.5">Images are fetched from Koofr on demand through the authenticated gateway.</p>
                     </div>
-                    <div class="flex gap-2">
-                        <div class="relative flex-1 sm:flex-none">
+                    <div class="flex flex-wrap sm:flex-nowrap gap-2">
+                        <div class="relative w-full sm:w-auto">
                             <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[11px]"></i>
                             <input type="search" id="receiptSearch" oninput="onReceiptSearch()" placeholder="Search receipts…" class="w-full sm:w-52 bg-gray-900 border border-gray-800 rounded-xl pl-8 pr-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
                         </div>
-                        <select id="receiptFilterYear" onchange="onReceiptFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
+                        <select id="receiptFilterYear" onchange="onReceiptFilterChange()" class="flex-1 sm:flex-none bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
                             <option value="ALL">All Years</option>
                         </select>
-                        <select id="receiptFilterMonth" onchange="onReceiptFilterChange()" class="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
+                        <select id="receiptFilterMonth" onchange="onReceiptFilterChange()" class="flex-1 sm:flex-none bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer font-semibold">
                             <option value="ALL">All Months</option>
                             <option value="01">January</option><option value="02">February</option><option value="03">March</option>
                             <option value="04">April</option><option value="05">May</option><option value="06">June</option>
@@ -1187,13 +1187,13 @@
                             <table class="w-full text-left">
                                 <thead class="text-[9px] uppercase tracking-wider text-slate-500 border-b border-gray-800">
                                     <tr>
-                                        <th class="py-2 px-3 text-center"><input type="checkbox" onchange="toggleAllClaims(this)" title="Select all" class="accent-indigo-500"></th>
-                                        <th class="py-2 px-4">Claim</th>
-                                        <th class="py-2 px-4">Submitted</th>
-                                        <th class="py-2 px-4 text-right">Claimed</th>
-                                        <th class="py-2 px-4 text-right">Reimbursed</th>
-                                        <th class="py-2 px-4 text-center">Status</th>
-                                        <th class="py-2 px-4 text-center">Actions</th>
+                                        <th class="py-2 px-2 sm:px-3 text-center"><input type="checkbox" onchange="toggleAllClaims(this)" title="Select all" class="accent-indigo-500"></th>
+                                        <th class="py-2 px-2 sm:px-4">Claim</th>
+                                        <th class="hidden sm:table-cell py-2 px-4">Submitted</th>
+                                        <th class="py-2 px-2 sm:px-4 text-right">Claimed</th>
+                                        <th class="hidden sm:table-cell py-2 px-4 text-right">Reimbursed</th>
+                                        <th class="hidden sm:table-cell py-2 px-4 text-center">Status</th>
+                                        <th class="py-2 px-1 sm:px-4 text-center"><span class="hidden sm:inline">Actions</span></th>
                                     </tr>
                                 </thead>
                                 <tbody id="claimsLedgerBody" class="divide-y divide-gray-800/60 text-slate-300"></tbody>
@@ -1261,26 +1261,14 @@
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="lg:col-span-2 glass-card rounded-2xl p-6 space-y-3">
-                    <div class="border-b border-gray-800 pb-3">
-                        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200">Medical Records</h3>
-                        <p class="text-[10px] text-slate-500 mt-0.5">Raw OCR captured from receipts; enrich via Claude (Export → import) or edit by hand.</p>
+                    <div class="flex items-start gap-3 border-b border-gray-800 pb-3">
+                        <input type="checkbox" onchange="toggleAllMedical(this)" title="Select all" class="accent-indigo-500 mt-1">
+                        <div class="min-w-0">
+                            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200">Medical Records</h3>
+                            <p class="text-[10px] text-slate-500 mt-0.5">Raw OCR captured from receipts; enrich via Claude (Export → import) or edit by hand.</p>
+                        </div>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left">
-                            <thead class="text-[9px] uppercase tracking-wider text-slate-500 border-b border-gray-800">
-                                <tr>
-                                    <th class="py-2 px-3 text-center"><input type="checkbox" onchange="toggleAllMedical(this)" title="Select all" class="accent-indigo-500"></th>
-                                    <th class="py-2 px-4">Record</th>
-                                    <th class="py-2 px-4 text-right">Insurance</th>
-                                    <th class="py-2 px-4 text-right">Patient</th>
-                                    <th class="py-2 px-4 text-right">Total</th>
-                                    <th class="py-2 px-4 text-center">Meds</th>
-                                    <th class="py-2 px-4 text-center">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="medLedgerBody" class="divide-y divide-gray-800/60 text-slate-300"></tbody>
-                        </table>
-                    </div>
+                    <div id="medLedgerBody" class="divide-y divide-gray-800/60 text-slate-300"></div>
                 </div>
                 <div class="space-y-6">
                     <div class="glass-card rounded-2xl p-6">
@@ -1714,6 +1702,18 @@
                     <input type="checkbox" id="editRecApplyClaim" onchange="updateEditClaimFieldVisibility()" class="w-4 h-4 rounded border-gray-800 text-violet-500 bg-gray-950 focus:ring-violet-500 cursor-pointer">
                     <label for="editRecApplyClaim" id="editRecApplyClaimLabel" class="text-xs font-semibold text-slate-300 cursor-pointer">Also apply these changes to the linked claim</label>
                 </div>
+                <div id="editRecDiningLinkWrap" class="bg-gray-950 border border-gray-800/80 rounded-xl p-3 space-y-3">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="editRecApplyDining" onchange="updateEditDiningFieldVisibility()" class="w-4 h-4 rounded border-gray-800 text-orange-500 bg-gray-950 focus:ring-orange-500 cursor-pointer">
+                        <label for="editRecApplyDining" id="editRecApplyDiningLabel" class="text-xs font-semibold text-slate-300 cursor-pointer">Record into Dining from this receipt</label>
+                    </div>
+                    <div id="editRecDiningFields" class="hidden grid grid-cols-2 gap-3">
+                        <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Meal Type</label>
+                            <select id="editRecDiningMeal" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500"></select></div>
+                        <div><label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Pax (optional)</label>
+                            <input type="number" step="1" min="0" inputmode="numeric" id="editRecDiningPax" placeholder="e.g. 2" class="w-full bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-orange-500"></div>
+                    </div>
+                </div>
                 <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs uppercase tracking-wider transition">Save Changes</button>
             </form>
         </div>
@@ -1735,6 +1735,10 @@
             <div id="deleteRecClaimLinkWrap" class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3 hidden">
                 <input type="checkbox" id="deleteRecAlsoClaim" class="w-4 h-4 rounded border-gray-800 text-rose-500 bg-gray-950 focus:ring-rose-500 cursor-pointer">
                 <label for="deleteRecAlsoClaim" class="text-xs font-semibold text-slate-300 cursor-pointer">Also delete the linked claim entry</label>
+            </div>
+            <div id="deleteRecDiningLinkWrap" class="flex items-center gap-2 bg-gray-950 border border-gray-800/80 rounded-xl p-3 hidden">
+                <input type="checkbox" id="deleteRecAlsoDining" class="w-4 h-4 rounded border-gray-800 text-rose-500 bg-gray-950 focus:ring-rose-500 cursor-pointer">
+                <label for="deleteRecAlsoDining" class="text-xs font-semibold text-slate-300 cursor-pointer">Also delete the linked Dining record</label>
             </div>
             <div class="flex gap-2.5 justify-end">
                 <button onclick="closeDeleteReceipt()" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-slate-200 bg-gray-900 border border-gray-800">Cancel</button>
@@ -1981,7 +1985,7 @@
       to fetch the new graph immediately.
     -->
     <script>
-      window.APP_VERSION = '2026.10.17-2';
+      window.APP_VERSION = '2026.10.18-4';
       (function () {
         var v = window.APP_VERSION;
         var mods = ['state','storage','config','sync','merge','dashboard','dropdowns',

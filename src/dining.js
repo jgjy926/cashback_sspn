@@ -62,7 +62,7 @@ export function diningMealTypeOptionsHtml(selected) {
     `<option value="${esc(c)}"${c === selected ? ' selected' : ''}>${esc(c)}</option>`).join('');
 }
 
-// Best-guess meal type from the time printed on the receipt (falls back to the first type).
+// Best-guess meal type from the time printed on the receipt.
 function guessMealType(ocr) {
   const types = diningMealTypes();
   const m = String(ocr || '').match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)(?:[:.][0-5]\d)?\s*(am|pm)?\b/i);
@@ -74,7 +74,9 @@ function guessMealType(ocr) {
     if (ap === 'am' && h === 12) h = 0;
     pick = h < 4 ? 'Supper' : h < 11 ? 'Breakfast' : h < 15 ? 'Lunch' : h < 18 ? 'Tea / Café' : h < 22 ? 'Dinner' : 'Supper';
   }
-  return types.includes(pick) ? pick : (types[0] || '');
+  // No readable time → don't pretend it was breakfast; fall back to "Other" when it exists.
+  if (types.includes(pick)) return pick;
+  return types.includes('Other') ? 'Other' : (types[0] || '');
 }
 
 // ---------- create from a receipt (called by the Receipts capture tick) ----------
@@ -103,6 +105,35 @@ export function createDiningRecordFromReceipt(receipt, extra = {}) {
     createdAt: now, updatedAt: now,
   });
   return id;
+}
+
+// ---------- link to an already-stored receipt (Edit Receipt modal, mirrors the claim link) ----------
+export function diningRecordForReceipt(receiptId) {
+  return receiptId ? records().find(d => d.receiptId === receiptId) || null : null;
+}
+
+// Push the receipt's edited header fields onto its linked dining record. Dishes, service/tax and
+// enrichment state are untouched — the receipt only knows the bill header.
+export function syncDiningFromReceipt(receipt, extra = {}) {
+  const d = diningRecordForReceipt(receipt.id);
+  if (!d) return false;
+  if (receipt.date) d.date = receipt.date;
+  if (receipt.merchant) d.restaurant = receipt.merchant;
+  if (num(receipt.total) > 0) d.amount = num(receipt.total);
+  d.currency = receipt.currency || d.currency || 'MYR';
+  if (receipt.remark) d.remark = receipt.remark;
+  d.txId = receipt.txId || null;
+  d.claimId = receipt.claimId || null;
+  if (extra.mealType) d.mealType = extra.mealType;
+  if (extra.pax != null && String(extra.pax).trim() !== '') d.pax = num(extra.pax);
+  d.updatedAt = new Date().toISOString();
+  return true;
+}
+
+export function deleteDiningForReceipt(receiptId) {
+  const before = records().length;
+  database.diningRecords = records().filter(d => d.receiptId !== receiptId);
+  return records().length !== before;
 }
 
 // ---------- filters ----------

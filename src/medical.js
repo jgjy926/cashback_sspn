@@ -31,7 +31,11 @@ function recordTotal(r) { return num(r.amountInsurance) + num(r.amountPatient); 
 function breakdownTotal(r) {
   return num(r.consultation) + (r.medicines || []).reduce((s, m) => s + num(m.amount), 0);
 }
-function reconciles(r) { return Math.abs(recordTotal(r) - breakdownTotal(r)) <= 0.01; }
+// A record with no breakdown yet (fresh from a receipt) is not a mismatch — only a contradicting one is.
+function reconciles(r) {
+  const b = breakdownTotal(r);
+  return b === 0 || Math.abs(recordTotal(r) - b) <= 0.01;
+}
 
 // ---------- create from a receipt (called by the 3rd capture tick) ----------
 export function createMedicalRecordFromReceipt(receipt, extra = {}) {
@@ -146,7 +150,7 @@ function renderMedicalLedger(list) {
   const body = document.getElementById('medLedgerBody');
   if (!body) return;
   if (!list.length) {
-    body.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-xs text-slate-500 italic">No medical records for this filter.</td></tr>';
+    body.innerHTML = '<p class="py-6 text-center text-xs text-slate-500 italic">No medical records for this filter.</p>';
     return;
   }
   body.innerHTML = list.map(r => {
@@ -158,25 +162,28 @@ function renderMedicalLedger(list) {
     const remark = r.remark ? `<div class="text-[9px] text-slate-400 italic">“${esc(r.remark)}”</div>` : '';
     const view = (r.imagePaths || []).length
       ? `<button onclick="viewMedicalPhotos('${r.id}')" class="text-indigo-400 hover:text-indigo-300 p-1" title="View photos"><i class="fa-solid fa-images"></i></button>` : '';
-    return `<tr class="hover:bg-gray-900/40 transition align-top">
-      <td class="py-2.5 px-3 text-center"><input type="checkbox" data-med-pick value="${esc(r.id)}" class="accent-indigo-500"></td>
-      <td class="py-2.5 px-4">
-        <div class="text-xs font-semibold text-slate-200 flex items-center gap-1.5 flex-wrap">${esc(r.merchant || '(no merchant)')} ${statusBadges(r)}</div>
-        <div class="text-[9px] text-slate-500 font-mono">${esc(r.date || '—')}</div>
-        ${consult}${medLines}${remark}
-      </td>
-      <td class="py-2.5 px-4 text-right font-mono text-xs text-sky-400">${esc(r.currency || 'MYR')} ${fmt(r.amountInsurance)}</td>
-      <td class="py-2.5 px-4 text-right font-mono text-xs text-amber-400">${esc(r.currency || 'MYR')} ${fmt(r.amountPatient)}</td>
-      <td class="py-2.5 px-4 text-right font-mono text-xs font-bold text-slate-100">${esc(r.currency || 'MYR')} ${fmt(recordTotal(r))}</td>
-      <td class="py-2.5 px-4 text-center text-[11px] text-slate-400">${(r.medicines || []).length}</td>
-      <td class="py-2.5 px-4 text-center">
-        <div class="flex gap-1 justify-center">
-          ${view}
-          <button onclick="openMedicalModal('${r.id}')" class="text-indigo-400 hover:text-indigo-300 p-1" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
-          <button onclick="deleteMedicalRecord('${r.id}')" class="text-rose-500 hover:text-rose-400 p-1" title="Delete"><i class="fa-solid fa-trash"></i></button>
+    const cur = esc(r.currency || 'MYR');
+    return `<div class="py-2.5 flex gap-2 sm:gap-3 items-start">
+      <input type="checkbox" data-med-pick value="${esc(r.id)}" class="accent-indigo-500 mt-1 shrink-0">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-slate-200 flex items-center gap-1.5 flex-wrap">${esc(r.merchant || '(no merchant)')} ${statusBadges(r)}</div>
+            <div class="text-[9px] text-slate-500 font-mono">${esc(r.date || '—')}${(r.medicines || []).length ? ` · ${(r.medicines || []).length} med${(r.medicines || []).length > 1 ? 's' : ''}` : ''}</div>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="font-mono text-xs font-bold text-slate-100 whitespace-nowrap">${cur} ${fmt(recordTotal(r))}</div>
+            <div class="flex gap-0.5 justify-end">
+              ${view}
+              <button onclick="openMedicalModal('${r.id}')" class="text-indigo-400 hover:text-indigo-300 p-1" title="Edit"><i class="fa-solid fa-pen-to-square"></i></button>
+              <button onclick="deleteMedicalRecord('${r.id}')" class="text-rose-500 hover:text-rose-400 p-1" title="Delete"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
         </div>
-      </td>
-    </tr>`;
+        <div class="text-[9px] font-mono"><span class="text-sky-400">Insurance ${cur} ${fmt(r.amountInsurance)}</span> · <span class="text-amber-400">Patient ${cur} ${fmt(r.amountPatient)}</span></div>
+        ${consult}${medLines}${remark}
+      </div>
+    </div>`;
   }).join('');
 }
 
@@ -281,7 +288,7 @@ export function medRecalc() {
   const cur = document.getElementById('medRecCurrency').value.trim() || 'MYR';
   document.getElementById('medRecTotalDisplay').innerText = `${cur} ${fmt(ins + pat)}`;
   const hint = document.getElementById('medRecReconcile');
-  if (Math.abs((ins + pat) - (consult + meds)) > 0.01) {
+  if (consult + meds > 0 && Math.abs((ins + pat) - (consult + meds)) > 0.01) {
     hint.classList.remove('hidden');
     hint.innerText = `⚠ Payer total (${fmt(ins + pat)}) ≠ consultation + medicines (${fmt(consult + meds)}).`;
   } else {
