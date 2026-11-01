@@ -157,8 +157,13 @@ Vehicle** (choose the vehicle, category and, optionally, the odometer). The reco
 **Vehicle** tab as *Raw*, carrying every photo and the combined OCR text.
 
 Enrichment is optional and can happen any time later: **Export** (Selected / New / All) produces
-one JSON file, Claude turns each `rawOcr` into an itemised record, and **Import JSON** writes it
-back by `id`. Nothing is ever required — every field stays editable by hand.
+one JSON file, Claude turns each `rawOcr` (or the receipt photos, if you attach them — they win
+over the OCR) into an itemised record, and **Import JSON** writes it back by `id`. Nothing is ever
+required — every field stays editable by hand.
+
+**⚠ Mismatch** means amount paid ≠ labour + parts + tax − discount, give or take 5 sen for rounding;
+the expanded row shows both figures. Records enriched before tax and discount existed may need
+exporting again (Selected / All) to pick them up, or the two fields can be typed in.
 
 "Log to credit-card ledger" is an independent tick: a card-paid repair is logged for cashback
 *and* recorded against the vehicle, cross-linked by `txId`. Vehicle totals count only vehicle

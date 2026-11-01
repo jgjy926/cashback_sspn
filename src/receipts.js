@@ -3,7 +3,7 @@ import { saveToLocalStorage } from './storage.js';
 import { refreshLedgerAndCalculations } from './dashboard.js';
 import { renderClaims } from './claims.js';
 import { createMedicalRecordFromReceipt, renderMedical } from './medical.js';
-import { createVehicleRecordFromReceipt, renderVehicle, vehicleOptionsHtml, vehicleCategoryOptionsHtml } from './vehicle.js';
+import { createVehicleRecordFromReceipt, syncVehicleFromReceipt, renderVehicle, vehicleOptionsHtml, vehicleCategoryOptionsHtml } from './vehicle.js';
 import { createDiningRecordFromReceipt, renderDining, diningMealTypeOptionsHtml,
   diningRecordForReceipt, syncDiningFromReceipt, deleteDiningForReceipt } from './dining.js';
 import { showToast } from './ui.js';
@@ -675,12 +675,14 @@ export function handleReceiptEditSubmit(e) {
     if (diningRecordForReceipt(r.id)) syncDiningFromReceipt(r, dinExtra);
     else { createDiningRecordFromReceipt(r, dinExtra); dinMsg = ' Added to Dining.'; }
   }
+  syncVehicleFromReceipt(r);
 
   saveToLocalStorage();
   refreshLedgerAndCalculations();
   renderReceipts();
   renderClaims();
   renderDining();
+  renderVehicle();
   closeEditReceipt();
   showToast('Receipt updated.' + dinMsg, 'success');
 }
@@ -1007,6 +1009,7 @@ function importReceiptsEnriched(data) {
     // A Raw dining record follows the cleaned-up header; an enriched one keeps its own values.
     const din = diningRecordForReceipt(r.id);
     if (din && !din.enriched) syncDiningFromReceipt(r);
+    syncVehicleFromReceipt(r);
     const solo = linkedSoloClaim(r);
     if (solo) {
       solo.title = r.merchant || solo.title;
@@ -1027,6 +1030,7 @@ function importReceiptsEnriched(data) {
   renderReceipts();
   renderClaims();
   renderDining();
+  renderVehicle();
   let msg = `Imported: ${updated} receipt(s) enriched`;
   if (txSynced) msg += ` · ${txSynced} ledger entr${txSynced > 1 ? 'ies' : 'y'} updated`;
   if (claimsSynced) msg += ` · ${claimsSynced} claim(s) updated`;

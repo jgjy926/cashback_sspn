@@ -21,6 +21,8 @@ const IO_SCHEMA_VERSION = 1;
 // Optional reminders: how early a due date / service odometer starts warning.
 const DUE_SOON_DAYS = 60;
 const DUE_SOON_KM = 1000;
+// Bills can be off by rounding (Malaysian 5-sen rounding), which has no field of its own.
+const RECONCILE_TOLERANCE = 0.05;
 
 let vehTrendChartObj = null, vehSplitChartObj = null;
 // Vehicle being edited in the garage panel ('' = the form adds a new one).
@@ -37,13 +39,16 @@ function today() { return new Date().toISOString().slice(0, 10); }
 
 // Two views of the same bill:
 //  - amount:    what was actually paid (canonical, used for every KPI and chart)
-//  - breakdown: labour + Σ parts (only a cross-check; blank until enriched)
+//  - breakdown: labour + Σ parts + tax − discount (only a cross-check; blank until enriched)
 function recordTotal(r) { return num(r.amount); }
-function breakdownTotal(r) { return num(r.labour) + (r.items || []).reduce((s, i) => s + num(i.amount), 0); }
+function breakdownTotal(r) {
+  const charges = num(r.labour) + (r.items || []).reduce((s, i) => s + num(i.amount), 0);
+  return charges ? charges + num(r.tax) - num(r.discount) : 0;
+}
 // A record with no breakdown yet is not a mismatch — only a *contradicting* breakdown is.
 function reconciles(r) {
   const b = breakdownTotal(r);
-  return b === 0 || Math.abs(recordTotal(r) - b) <= 0.01;
+  return b === 0 || Math.abs(recordTotal(r) - b) <= RECONCILE_TOLERANCE + 1e-9;
 }
 
 export function vehicleCategories() {
@@ -81,6 +86,7 @@ export function createVehicleRecordFromReceipt(receipt, extra = {}) {
     amount: num(receipt.total),          // seed from the OCR'd total; refine on enrichment
     labour: 0,
     items: [],
+    tax: 0, discount: 0,
     odometer: num(extra.odometer),       // optional; drives cost/km + service reminders
     nextServiceDate: '', nextServiceKm: 0, expiryDate: '', warrantyUntil: '',
     imagePaths: (extra.imagePaths && extra.imagePaths.length) ? extra.imagePaths
@@ -94,6 +100,19 @@ export function createVehicleRecordFromReceipt(receipt, extra = {}) {
     createdAt: now, updatedAt: now,
   });
   return id;
+}
+
+// A corrected receipt (edited, or enriched in the Receipts tab) carries its header to the linked
+// Raw vehicle record, so the amount paid doesn't stay at the first OCR guess. An enriched record
+// keeps its own values — they were read from the bill itself.
+export function syncVehicleFromReceipt(receipt) {
+  (database.vehicleRecords || []).filter(v => v.receiptId === receipt.id && !v.enriched).forEach(v => {
+    if (receipt.date) v.date = receipt.date;
+    if (receipt.merchant) v.merchant = receipt.merchant;
+    if (num(receipt.total) > 0) v.amount = num(receipt.total);
+    v.currency = receipt.currency || v.currency || 'MYR';
+    v.updatedAt = new Date().toISOString();
+  });
 }
 
 // ---------- filters ----------
@@ -330,7 +349,7 @@ function statusBadges(r) {
   badges.push(r.enriched
     ? '<span class="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 rounded font-bold">Enriched</span>'
     : '<span title="Not enriched yet — export it to Claude any time, or type the details in" class="text-[8px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 rounded font-bold">Raw</span>');
-  if (!reconciles(r)) badges.push('<span title="Amount paid ≠ labour + parts" class="text-[8px] bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1.5 rounded font-bold">⚠ Mismatch</span>');
+  if (!reconciles(r)) badges.push('<span title="Amount paid ≠ labour + parts + tax − discount" class="text-[8px] bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1.5 rounded font-bold">⚠ Mismatch</span>');
   if (r.txId) badges.push('<span title="Also logged to the credit-card ledger" class="text-[8px] bg-sky-500/10 text-sky-300 border border-sky-500/20 px-1.5 rounded font-bold"><i class="fa-solid fa-credit-card"></i></span>');
   const n = (r.imagePaths || []).length;
   if (n) badges.push(`<span class="text-[8px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 rounded font-bold"><i class="fa-solid fa-image"></i> ${n}</span>`);
@@ -378,6 +397,13 @@ function renderVehicleLedger(list) {
       : '';
     const labour = num(r.labour)
       ? `<div class="flex justify-between gap-3"><span><i class="fa-solid fa-screwdriver-wrench mr-1 text-slate-600"></i>Labour</span><span class="font-mono shrink-0">${cur} ${fmt(r.labour)}</span></div>` : '';
+    const tax = num(r.tax)
+      ? `<div class="flex justify-between gap-3"><span><i class="fa-solid fa-percent mr-1 text-slate-600"></i>Tax (SST)</span><span class="font-mono shrink-0">${cur} ${fmt(r.tax)}</span></div>` : '';
+    const discount = num(r.discount)
+      ? `<div class="flex flex-wrap justify-between gap-x-3 text-emerald-400/80"><span><i class="fa-solid fa-tag mr-1"></i>Discount</span><span class="font-mono shrink-0">− ${cur} ${fmt(r.discount)}</span></div>` : '';
+    // Spell out a mismatch so the gap can be compared with the receipt.
+    const gap = reconciles(r) ? ''
+      : `<div class="flex flex-wrap justify-between gap-x-3 text-rose-400 border-t border-gray-800/80 pt-0.5"><span>Breakdown (paid ${cur} ${fmt(recordTotal(r))})</span><span class="font-mono shrink-0">${cur} ${fmt(breakdownTotal(r))}</span></div>`;
     const notes = [];
     if (num(r.odometer)) notes.push(`${num(r.odometer).toLocaleString('en-MY')} km`);
     if (r.nextServiceDate) notes.push(`next service ${esc(r.nextServiceDate)}`);
@@ -386,14 +412,14 @@ function renderVehicleLedger(list) {
     if (r.warrantyUntil) notes.push(`warranty to ${esc(r.warrantyUntil)}`);
     const noteLine = notes.length ? `<div><i class="fa-solid fa-circle-info mr-1 text-slate-600"></i>${notes.join(' · ')}</div>` : '';
     const remark = r.remark ? `<div class="text-slate-400 italic">“${esc(r.remark)}”</div>` : '';
-    const hasDetails = !!(labour || partLines || noteLine || remark);
+    const hasDetails = !!(labour || partLines || tax || discount || gap || noteLine || remark);
     const open = vehicleExpandAll || openVehicleRows.has(r.id);
     const chipLabel = items.length ? `${items.length} item${items.length > 1 ? 's' : ''}` : 'Details';
     const toggle = hasDetails
       ? `<button type="button" onclick="toggleVehicleDetails('${esc(r.id)}')" class="mt-1 inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-indigo-400 hover:text-indigo-300">
           <i id="vehChev-${esc(r.id)}" class="fa-solid fa-chevron-right transition-transform ${open ? 'rotate-90' : ''}"></i>${chipLabel}</button>` : '';
     const details = hasDetails
-      ? `<div id="vehDet-${esc(r.id)}" class="${open ? '' : 'hidden'} mt-1.5 text-[10px] text-slate-500 space-y-0.5 bg-gray-950/60 border border-gray-800/80 rounded-lg px-2.5 py-2">${labour}${partLines}${noteLine}${remark}</div>` : '';
+      ? `<div id="vehDet-${esc(r.id)}" class="${open ? '' : 'hidden'} mt-1.5 text-[10px] text-slate-500 space-y-0.5 bg-gray-950/60 border border-gray-800/80 rounded-lg px-2.5 py-2">${labour}${partLines}${tax}${discount}${gap}${noteLine}${remark}</div>` : '';
     const view = (r.imagePaths || []).length
       ? `<button onclick="viewVehiclePhotos('${esc(r.id)}')" class="text-indigo-400 hover:text-indigo-300 p-1" title="View photos"><i class="fa-solid fa-images"></i></button>` : '';
     return `<tr class="hover:bg-gray-900/40 transition align-top">
@@ -477,6 +503,8 @@ export function openVehicleModal(id) {
   document.getElementById('vehRecCurrency').value = (r && r.currency) || 'MYR';
   document.getElementById('vehRecAmount').value = r ? num(r.amount) : 0;
   document.getElementById('vehRecLabour').value = r ? num(r.labour) : 0;
+  document.getElementById('vehRecTax').value = r && num(r.tax) ? num(r.tax) : '';
+  document.getElementById('vehRecDiscount').value = r && num(r.discount) ? num(r.discount) : '';
   document.getElementById('vehRecOdometer').value = r && num(r.odometer) ? num(r.odometer) : '';
   document.getElementById('vehRecNextServiceDate').value = (r && r.nextServiceDate) || '';
   document.getElementById('vehRecNextServiceKm').value = r && num(r.nextServiceKm) ? num(r.nextServiceKm) : '';
@@ -531,10 +559,13 @@ export function vehRecalc() {
   const cur = document.getElementById('vehRecCurrency').value.trim() || 'MYR';
   document.getElementById('vehRecTotalDisplay').innerText = `${cur} ${fmt(amount)}`;
   const hint = document.getElementById('vehRecReconcile');
-  const breakdown = labour + parts;
-  if (breakdown > 0 && Math.abs(amount - breakdown) > 0.01) {
+  const charges = labour + parts;
+  const breakdown = charges
+    ? charges + num(document.getElementById('vehRecTax').value) - num(document.getElementById('vehRecDiscount').value)
+    : 0;
+  if (breakdown > 0 && Math.abs(amount - breakdown) > RECONCILE_TOLERANCE + 1e-9) {
     hint.classList.remove('hidden');
-    hint.innerText = `⚠ Amount paid (${fmt(amount)}) ≠ labour + parts (${fmt(breakdown)}).`;
+    hint.innerText = `⚠ Amount paid (${fmt(amount)}) ≠ labour + parts + tax − discount (${fmt(breakdown)}).`;
   } else {
     hint.classList.add('hidden');
   }
@@ -552,6 +583,8 @@ export function handleVehicleSubmit(e) {
     amount: num(document.getElementById('vehRecAmount').value),
     labour: num(document.getElementById('vehRecLabour').value),
     items: readPartRows(),
+    tax: num(document.getElementById('vehRecTax').value),
+    discount: Math.abs(num(document.getElementById('vehRecDiscount').value)),
     odometer: num(document.getElementById('vehRecOdometer').value),
     nextServiceDate: document.getElementById('vehRecNextServiceDate').value,
     nextServiceKm: num(document.getElementById('vehRecNextServiceKm').value),
@@ -597,12 +630,19 @@ function downloadJson(obj, filename) {
 }
 
 const CLAUDE_INSTRUCTIONS =
-  'You convert raw OCR text from Malaysian workshop / petrol station / road tax / insurance receipts into structured JSON. ' +
-  'For EACH record in "records", read its "rawOcr" and produce an enriched record that keeps the SAME "id". ' +
+  'You convert Malaysian workshop / petrol station / road tax / insurance receipts into structured JSON. ' +
+  'If photos of the receipts are attached, they are the source of truth: match each photo to its record by merchant, date or total and read every figure from the photo. ' +
+  'Otherwise read the record\'s "rawOcr". The "amount" in the input is only an OCR guess — always read the printed grand total yourself. ' +
+  'For EACH record in "records", produce an enriched record that keeps the SAME "id". ' +
   'Extract: merchant (workshop/station/insurer name), date (YYYY-MM-DD), currency (default MYR), ' +
   'category (choose the best fit from "allowedCategories"), amount (the grand total actually paid, as a number), ' +
-  'labour (labour/service/workmanship charge as a number, 0 if none), ' +
-  'items as an array of { "name", "qty", "amount" } for each part / fluid / line item, ' +
+  'labour (the sum of labour/service/workmanship charges as a number, 0 if none), ' +
+  'items as an array of { "name", "qty", "amount" } — one entry per part / fluid / other line, where "amount" is the LINE TOTAL ' +
+  '(qty × unit price, after any discount printed on that line). Never list a labour charge in items as well as in labour. ' +
+  'tax (SST / GST printed separately as a number; 0 if none or if the prices already include it), ' +
+  'discount (any discount printed separately from the lines, as a POSITIVE number, 0 if none). Ignore rounding adjustments. ' +
+  'Before replying, check that labour + all item amounts + tax − discount equals amount. If it does not, re-read the receipt; ' +
+  'if it still does not add up, keep the printed figures and say what is off in "remark". ' +
   'odometer (mileage in km if the receipt shows one, else 0), ' +
   'nextServiceDate and nextServiceKm (if the receipt states the next service due, else "" / 0), ' +
   'expiryDate (road tax / insurance coverage end date as YYYY-MM-DD, else ""), ' +
@@ -647,7 +687,7 @@ function vehicleExportPayload(scope) {
     allowedCategories: vehicleCategories(),
     targetSchema: {
       id: '', date: 'YYYY-MM-DD', merchant: '', currency: 'MYR', category: '', amount: 0, labour: 0,
-      items: [{ name: '', qty: 1, amount: 0 }], odometer: 0,
+      items: [{ name: '', qty: 1, amount: 0 }], tax: 0, discount: 0, odometer: 0,
       nextServiceDate: '', nextServiceKm: 0, expiryDate: '', warrantyUntil: '', remark: '',
     },
     // imagePaths are deliberately omitted — Claude can't open Koofr paths, so they'd only cost tokens.
@@ -713,6 +753,8 @@ function importVehicleEnriched(data) {
     if (Array.isArray(rec.items)) {
       r.items = rec.items.map(i => ({ name: String((i && i.name) || ''), qty: num(i && i.qty), amount: num(i && i.amount) }));
     }
+    if (rec.tax != null) r.tax = num(rec.tax);
+    if (rec.discount != null) r.discount = Math.abs(num(rec.discount));
     // The OCR'd total already on the record is trusted unless the enrichment gives a real number.
     if (rec.amount != null && num(rec.amount) > 0) r.amount = num(rec.amount);
     if (rec.odometer != null && num(rec.odometer) > 0) r.odometer = num(rec.odometer);
