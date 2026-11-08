@@ -10,13 +10,15 @@ import { showToast } from './ui.js';
 import { compressImage, compressForStorage, runOcr, parseReceiptText, learnMerchant,
   aiReviewEnabled, runAiReview, mergeAiReview, AI_REVIEW_THRESHOLD, AI_FIELD_CEILING } from './ocr.js';
 import { gatewayConfig } from './config.js';
+import { isPdfFile, readPdfPages, MAX_PDF_PAGES } from './pdf.js';
 import { openImageViewer } from './mobile.js';
 import { openEnrichPanel, downloadJson, importJsonFile, scopeRecords } from './enrich.js';
 
 // Multi-photo capture. `pendingPhotos[0]` is the PRIMARY photo used by the existing receipt /
 // ledger / claim flows (via `pending`); any extra photos are grouped into a Medicine & Records
 // entry when the medical tick is on. This keeps the single-photo BAU path unchanged.
-let pendingPhotos = []; // each: { blob (hi-res store), ocrBlob (<=1MB OCR), dataUrl, width, height, ocrText }
+let pendingPhotos = []; // each: { blob (hi-res store), ocrBlob (<=1MB OCR), dataUrl, width, height, ocrText, pdfText? }
+// `pdfText` marks a PDF page whose digital text layer was read directly: it skips OCR.
 let pending = null;     // live reference to pendingPhotos[0]
 function syncPending() { pending = pendingPhotos[0] || null; }
 
@@ -116,13 +118,30 @@ export async function handleReceiptFile(input) {
   if (!files.length) return;
   const status = document.getElementById('receiptOcrStatus');
   try {
+    // Two copies per photo: a hi-res one to store (sharp on zoom) and a <=1 MB one for OCR.
+    const addImage = async (img, pdfText = '') => {
+      const store = await compressForStorage(img);
+      const ocr = await compressImage(img);
+      pendingPhotos.push({ blob: store.blob, ocrBlob: ocr.blob, dataUrl: await blobToDataUrl(store.blob),
+        width: store.width, height: store.height, ocrText: pdfText, pdfText: !!pdfText });
+    };
     for (let i = 0; i < files.length; i++) {
-      if (files.length > 1) status.innerText = `Preparing photo ${i + 1}/${files.length}…`;
-      // Two copies per photo: a hi-res one to store (sharp on zoom) and a <=1 MB one for OCR.
-      const store = await compressForStorage(files[i]);
-      const ocr = await compressImage(files[i]);
-      pendingPhotos.push({ blob: store.blob, ocrBlob: ocr.blob, dataUrl: await blobToDataUrl(store.blob), width: store.width, height: store.height, ocrText: '' });
+      const tag = files.length > 1 ? ` ${i + 1}/${files.length}` : '';
+      if (isPdfFile(files[i])) {
+        // Each PDF page becomes one photo; pages with a text layer bring their text along.
+        const pages = await readPdfPages(files[i], {
+          onProgress: (n, total) => { status.innerText = `Reading PDF${tag} — page ${n}/${Math.min(total, MAX_PDF_PAGES)}…`; },
+        });
+        for (const pg of pages) await addImage(pg.image, pg.text);
+        if (pages.length && pages[0].pageCount > MAX_PDF_PAGES) {
+          showToast(`Only the first ${MAX_PDF_PAGES} of ${pages[0].pageCount} PDF pages were added.`, 'error');
+        }
+      } else {
+        if (files.length > 1) status.innerText = `Preparing photo${tag}…`;
+        await addImage(files[i]);
+      }
     }
+    if (!pendingPhotos.length) throw new Error('Nothing to add.');
     syncPending();
     document.getElementById('receiptPreview').src = pending.dataUrl;
     document.getElementById('receiptPreviewWrap').hidden = false;
@@ -130,7 +149,10 @@ export async function handleReceiptFile(input) {
     renderReceiptThumbs();
     document.getElementById('receiptOcrStatus').innerText = '';
     document.getElementById('receiptForm').hidden = true;
-    showToast(pendingPhotos.length > 1 ? `${pendingPhotos.length} photos ready. Tap “Scan with OCR”.` : 'Photo ready. Tap "Scan with OCR".');
+    const allText = pendingPhotos.every(p => p.pdfText);
+    showToast(allText
+      ? 'PDF text found — tap “Scan with OCR” to fill the form (no OCR needed).'
+      : pendingPhotos.length > 1 ? `${pendingPhotos.length} pages ready. Tap “Scan with OCR”.` : 'Photo ready. Tap "Scan with OCR".');
   } catch (err) {
     status.innerText = '';
     showToast(err.message, 'error');
@@ -174,6 +196,7 @@ export async function runReceiptOcr() {
   // attempt keeps whatever text the photo already had, so re-scanning can only add, never lose.
   let failed = 0;
   for (let i = 0; i < pendingPhotos.length; i++) {
+    if (pendingPhotos[i].pdfText) continue; // digital PDF page: text already exact, skip OCR
     if (pendingPhotos.length > 1) status.innerText = `Scanning photo ${i + 1}/${pendingPhotos.length}…`;
     try {
       pendingPhotos[i].ocrText = await runOcr(pendingPhotos[i].ocrBlob);

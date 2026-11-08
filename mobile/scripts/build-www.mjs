@@ -64,6 +64,17 @@ async function vendor(html) {
       html = html.replace(FA_CSS, './vendor/fa/css/all.min.css');
     } catch (e) { console.warn(`! keeping CDN for Font Awesome: ${e.message}`); }
   }
+  // pdf.js (lazy-loaded by src/pdf.js) — bundle the script + its worker for offline use.
+  const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/';
+  if (html.includes(`window.PDFJS_BASE = '${PDFJS}'`)) {
+    try {
+      await mkdir(join(www, 'vendor', 'pdfjs'), { recursive: true });
+      for (const f of ['pdf.min.js', 'pdf.worker.min.js']) {
+        await writeFile(join(www, 'vendor', 'pdfjs', f), await download(PDFJS + f, `pdfjs/${f}`));
+      }
+      html = html.replace(`window.PDFJS_BASE = '${PDFJS}'`, `window.PDFJS_BASE = './vendor/pdfjs/'`);
+    } catch (e) { console.warn(`! keeping CDN for pdf.js: ${e.message}`); }
+  }
   return html;
 }
 
